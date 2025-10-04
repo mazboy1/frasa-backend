@@ -427,7 +427,6 @@ async function run() {
       }
     });
 
-
     // ===== PAYMENT ROUTES =====
     app.post('/api/create-payment-intent', async (req, res) => {
       try {
@@ -633,19 +632,29 @@ async function run() {
       }
     });
 
+    // Root endpoint - DI DALAM run()
+    app.get('/', (req, res) => {
+      res.send('Frasa ID LMS Server is Running');
+    });
+
+    // 404 Handler untuk routes yang tidak ada
+    app.use('*', (req, res) => {
+      res.status(404).json({ 
+        success: false,
+        message: 'Route not found',
+        path: req.originalUrl
+      });
+    });
+
+    // ===== START SERVER =====
+    // PASTIKAN INI DI DALAM run() function
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
+
   } catch (error) {
     console.error("Failed to connect to MongoDB", error);
   }
 }
 
 run().catch(console.dir);
-
-// Root endpoint
-app.get('/', (req, res) => {
-  res.send('Frasa ID LMS Server is Running');
-});
-
-// Start server
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-});
