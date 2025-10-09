@@ -646,6 +646,119 @@ async function run() {
       });
     });
 
+        // ===== DEBUG & EMERGENCY ROUTES =====
+    app.get('/api/debug/user/:email', async (req, res) => {
+      try {
+        const user = await usersCollection.findOne({ email: req.params.email });
+        console.log('🔍 DEBUG User Data:', user);
+        
+        if (!user) {
+          return res.status(404).send({ 
+            success: false, 
+            message: "User tidak ditemukan",
+            debug: { 
+              email: req.params.email,
+              collection: "users",
+              totalUsers: await usersCollection.countDocuments()
+            }
+          });
+        }
+        
+        res.send({
+          success: true,
+          data: user,
+          debug: {
+            hasRole: !!user.role,
+            roleValue: user.role,
+            allFields: Object.keys(user),
+            isRoleValid: ['admin', 'instructor', 'user'].includes(user.role)
+          }
+        });
+      } catch (error) {
+        console.error('❌ DEBUG Error:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    });
+
+    // Emergency endpoint untuk update role user
+    app.patch('/api/emergency/update-role/:email', async (req, res) => {
+      try {
+        const { role } = req.body;
+        const validRoles = ['admin', 'instructor', 'user'];
+        
+        if (!validRoles.includes(role)) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Role harus: admin, instructor, atau user',
+            validRoles 
+          });
+        }
+        
+        // Cek apakah user exists
+        const existingUser = await usersCollection.findOne({ email: req.params.email });
+        if (!existingUser) {
+          return res.status(404).send({ 
+            success: false, 
+            message: 'User tidak ditemukan' 
+          });
+        }
+        
+        const result = await usersCollection.updateOne(
+          { email: req.params.email },
+          { $set: { role: role } }
+        );
+        
+        // Get updated user
+        const updatedUser = await usersCollection.findOne({ email: req.params.email });
+        
+        res.send({ 
+          success: true, 
+          message: `Role berhasil diupdate menjadi: ${role}`,
+          previousRole: existingUser.role,
+          newRole: updatedUser.role,
+          result 
+        });
+      } catch (error) {
+        console.error('Error updating role:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // Bulk update semua user yang missing role
+    app.patch('/api/emergency/fix-all-roles', async (req, res) => {
+      try {
+        const result = await usersCollection.updateMany(
+          { 
+            $or: [
+              { role: { $exists: false } },
+              { role: null },
+              { role: '' }
+            ]
+          },
+          { $set: { role: "user" } }
+        );
+        
+        res.send({
+          success: true,
+          message: `Berhasil update ${result.modifiedCount} user dengan role default`,
+          result
+        });
+      } catch (error) {
+        console.error('Error bulk updating roles:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
     // ===== START SERVER =====
     // PASTIKAN INI DI DALAM run() function
     app.listen(port, () => {
