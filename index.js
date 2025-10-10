@@ -38,6 +38,63 @@ const verifyJWT = (req, res, next) => {
   });
 };
 
+// ===== PERBAIKI MIDDLEWARE =====
+const verifyAdmin = async (req, res, next) => {
+  try {
+    const email = req.decoded.email;
+    const user = await usersCollection.findOne({ email });
+    if (user?.role === 'admin') {
+      next();
+    } else {
+      return res.status(401).send({ message: 'Unauthorized access' });
+    }
+  } catch (error) {
+    console.error("Admin verification error:", error);
+    return res.status(500).send({ message: 'Server error' });
+  }
+};
+
+const verifyInstructor = async (req, res, next) => {
+  try {
+    const email = req.decoded.email;
+    const user = await usersCollection.findOne({ email });
+    
+    if (user?.role === 'instructor' || user?.role === 'admin') {
+      next();
+    } else {
+      return res.status(403).send({ 
+        message: 'Hanya instructor yang dapat mengakses fitur ini' 
+      });
+    }
+  } catch (error) {
+    console.error("Instructor verification error:", error);
+    return res.status(500).send({ message: 'Server error' });
+  }
+};
+
+const verifyInstructorOrOwnData = async (req, res, next) => {
+  try {
+    const email = req.decoded.email;
+    const requestedEmail = req.params.email || req.query.email;
+    
+    const user = await usersCollection.findOne({ email });
+    
+    // Allow jika: admin, instructor, atau akses data sendiri
+    if (user?.role === 'admin' || 
+        user?.role === 'instructor' || 
+        email === requestedEmail) {
+      next();
+    } else {
+      return res.status(403).send({ 
+        message: 'Unauthorized access' 
+      });
+    }
+  } catch (error) {
+    console.error("Middleware error:", error);
+    return res.status(500).send({ message: 'Server error' });
+  }
+};
+
 async function run() {
   try {
     await client.connect();
@@ -52,27 +109,6 @@ async function run() {
     const enrolledCollection = database.collection("enrolled");
     const appliedCollection = database.collection("applied");
     const feedbackCollection = database.collection("feedback");
-
-    // Role Verification Middleware
-    const verifyAdmin = async (req, res, next) => {
-      const email = req.decoded.email;
-      const user = await usersCollection.findOne({ email });
-      if (user?.role === 'admin') {
-        next();
-      } else {
-        return res.status(401).send({ message: 'Unauthorized access' });
-      }
-    };
-
-    const verifyInstructor = async (req, res, next) => {
-      const email = req.decoded.email;
-      const user = await usersCollection.findOne({ email });
-      if (user?.role === 'instructor') {
-        next();
-      } else {
-        return res.status(401).send({ message: 'Unauthorized access' });
-      }
-    };
 
     // ===== USER ROUTES =====
     app.post('/api/set-token', async (req, res) => {
@@ -95,10 +131,34 @@ async function run() {
       res.send(result);
     });
 
+    // ✅ PERBAIKI: ENDPOINT GET USER BY EMAIL
     app.get('/api/user/:email', async (req, res) => {
-      const user = await usersCollection.findOne({ email: req.params.email });
-      if (!user) return res.status(404).send({ message: "User tidak ditemukan" });
-      res.send(user);
+      try {
+        const user = await usersCollection.findOne({ email: req.params.email });
+        console.log('🔍 User data for:', req.params.email, user);
+        
+        if (!user) {
+          return res.status(404).send({ 
+            success: false, 
+            message: "User tidak ditemukan" 
+          });
+        }
+        
+        res.send({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role || 'user', // ✅ DEFAULT VALUE JIKA ROLE NULL
+          photoUrl: user.photoUrl,
+          address: user.address,
+          about: user.about,
+          skills: user.skills,
+          createdAt: user.createdAt
+        });
+      } catch (error) {
+        console.error("Error fetching user:", error);
+        res.status(500).send({ error: error.message });
+      }
     });
 
     app.delete('/api/delete-user/:id', verifyJWT, verifyAdmin, async (req, res) => {
@@ -122,7 +182,161 @@ async function run() {
       res.send(result);
     });
 
-    // ===== CLASS ROUTES =====
+    // ===== CLASS ROUTES - YANG DIPERBAIKI =====
+
+    // ✅ ENDPOINT BARU: GET CLASSES BY INSTRUCTOR (REKOMENDASI)
+    app.get('/api/instructor/classes', verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        console.log('🔍 Fetching classes for instructor:', email);
+        
+        if (!email) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+
+        // Verifikasi bahwa user hanya bisa akses data sendiri
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email 
+        }).toArray();
+
+        console.log('✅ Found classes:', classes.length);
+        
+        res.send({ 
+          success: true, 
+          classes: classes,
+          total: classes.length
+        });
+        
+      } catch (error) {
+        console.error("❌ Error fetching instructor classes:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ ENDPOINT LAMA: GET CLASSES BY EMAIL (COMPATIBLE)
+    app.get('/api/classes/:email', verifyJWT, async (req, res) => {
+      try {
+        const email = req.params.email;
+        
+        console.log('🔍 Fetching classes for:', email);
+        
+        // Verifikasi bahwa user hanya bisa akses data sendiri
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email 
+        }).toArray();
+
+        console.log('✅ Found classes:', classes.length);
+        
+        res.send(classes); // ✅ KIRIM LANGSUNG ARRAY (COMPATIBLE DENGAN FRONTEND LAMA)
+        
+      } catch (error) {
+        console.error("❌ Error fetching classes:", error);
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    // ✅ ENDPOINT UNTUK GET PENDING CLASSES
+    app.get('/api/instructor/pending-classes', verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        if (!email) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+
+        // Verifikasi akses
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email,
+          status: 'pending'
+        }).toArray();
+
+        res.send({ 
+          success: true, 
+          classes: classes,
+          total: classes.length 
+        });
+        
+      } catch (error) {
+        console.error("Error fetching pending classes:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ ENDPOINT UNTUK GET APPROVED CLASSES
+    app.get('/api/instructor/approved-classes', verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        if (!email) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+
+        // Verifikasi akses
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email,
+          status: 'approved'
+        }).toArray();
+
+        res.send({ 
+          success: true, 
+          classes: classes,
+          total: classes.length 
+        });
+        
+      } catch (error) {
+        console.error("Error fetching approved classes:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ENDPOINT LAINNYA UNTUK CLASSES (TETAP SAMA)
     app.post('/api/new-class', verifyJWT, verifyInstructor, async (req, res) => {
       try {
         const classData = {
@@ -156,13 +370,6 @@ async function run() {
 
     app.get('/api/classes', async (req, res) => {
       const result = await classesCollection.find({ status: 'approved' }).toArray();
-      res.send(result);
-    });
-
-    app.get('/api/classes/:email', verifyJWT, verifyInstructor, async (req, res) => {
-      const result = await classesCollection.find({ 
-        instructorEmail: req.params.email 
-      }).toArray();
       res.send(result);
     });
 
@@ -269,85 +476,11 @@ async function run() {
       }
     });
 
-    app.post('/api/classes/:id/feedback', verifyJWT, verifyAdmin, async (req, res) => {
-      try {
-        const classId = req.params.id;
-        const { feedback, rating } = req.body;
-
-        if (!ObjectId.isValid(classId)) {
-          return res.status(400).json({ error: 'ID kelas tidak valid' });
-        }
-
-        if (!feedback || !rating) {
-          return res.status(400).json({ error: 'Feedback dan rating harus diisi' });
-        }
-
-        // Simpan feedback ke collection terpisah
-        const feedbackData = {
-          classId: new ObjectId(classId),
-          feedback,
-          rating: parseInt(rating),
-          createdAt: new Date(),
-          adminEmail: req.decoded.email // Mengambil email admin dari JWT token
-        };
-
-        const result = await feedbackCollection.insertOne(feedbackData);
-
-        // Update kelas dengan menambahkan feedbackId
-        await classesCollection.updateOne(
-          { _id: new ObjectId(classId) },
-          { $set: { feedbackId: result.insertedId } }
-        );
-
-        res.json({ 
-          success: true, 
-          message: 'Feedback berhasil dikirim',
-          data: result 
-        });
-      } catch (err) {
-        console.error('Error submitting feedback:', err);
-        res.status(500).json({ error: 'Server error' });
-      }
-    });
-
-    // ENDPOINT: Mendapatkan feedback untuk kelas tertentu
-    app.get('/api/classes/:id/feedback', async (req, res) => {
-      try {
-        const classId = req.params.id;
-
-        if (!ObjectId.isValid(classId)) {
-          return res.status(400).json({ error: 'ID kelas tidak valid' });
-        }
-
-        const feedback = await feedbackCollection.findOne({ 
-          classId: new ObjectId(classId) 
-        });
-
-        if (!feedback) {
-          return res.status(404).json({ error: 'Feedback tidak ditemukan' });
-        }
-
-        res.json({ success: true, data: feedback });
-      } catch (err) {
-        console.error('Error fetching feedback:', err);
-        res.status(500).json({ error: 'Server error' });
-      }
-    });
-
-    app.get('/api/approved-classes', verifyJWT, verifyAdmin, async (req, res) => {
-      const result = await classesCollection.find({ 
-        status: 'approved' 
-      }).toArray();
-      res.send(result);
-    });
-
     // ===== CART ROUTES =====
-    
     app.post('/api/add-to-cart', verifyJWT, async (req, res) => {
       try {
         const { classId, userMail } = req.body;
         
-        // Cek apakah kelas sudah ada di keranjang
         const existingItem = await cartCollection.findOne({ 
           classId: classId, 
           userMail: userMail 
@@ -431,7 +564,7 @@ async function run() {
     app.post('/api/create-payment-intent', async (req, res) => {
       try {
         const { price } = req.body;
-        const amount = parseInt(price * 100); // Convert to cents
+        const amount = parseInt(price * 100);
 
         const paymentIntent = await stripe.paymentIntents.create({
           amount: amount,
@@ -448,7 +581,6 @@ async function run() {
       }
     });
 
-    // Endpoint untuk menyimpan info payment
     app.post('/api/payment-info', verifyJWT, async (req, res) => {
       try {
         const { classesId, userEmail, transactionId, amount } = req.body;
@@ -458,7 +590,6 @@ async function run() {
           ? [new ObjectId(singleClassId)] 
           : classesId.map(id => new ObjectId(id));
 
-        // Update enrollment counts
         const updateOperations = classesToProcess.map(classId => {
           return classesCollection.updateOne(
             { _id: classId },
@@ -473,17 +604,14 @@ async function run() {
 
         await Promise.all(updateOperations);
 
-        // Save payment info
         const paymentResult = await paymentCollection.insertOne(req.body);
 
-        // Remove from cart
         const deleteQuery = singleClassId
           ? { classId: singleClassId, userMail: userEmail }
           : { classId: { $in: classesId }, userMail: userEmail };
 
         await cartCollection.deleteMany(deleteQuery);
 
-        // Create enrollment record
         const enrolledData = {
           userEmail,
           classesId: classesToProcess,
@@ -622,31 +750,7 @@ async function run() {
       res.send(result);
     });
 
-    // Health check endpoint
-    app.get('/health', async (req, res) => {
-      try {
-        await client.db("admin").command({ ping: 1 });
-        res.status(200).json({ status: 'OK', database: 'Connected' });
-      } catch (error) {
-        res.status(500).json({ status: 'Error', database: 'Disconnected' });
-      }
-    });
-
-    // Root endpoint - DI DALAM run()
-    app.get('/', (req, res) => {
-      res.send('Frasa ID LMS Server is Running');
-    });
-
-    // 404 Handler untuk routes yang tidak ada
-    app.use('*', (req, res) => {
-      res.status(404).json({ 
-        success: false,
-        message: 'Route not found',
-        path: req.originalUrl
-      });
-    });
-
-        // ===== DEBUG & EMERGENCY ROUTES =====
+    // ===== DEBUG & EMERGENCY ROUTES =====
     app.get('/api/debug/user/:email', async (req, res) => {
       try {
         const user = await usersCollection.findOne({ email: req.params.email });
@@ -684,6 +788,46 @@ async function run() {
       }
     });
 
+    app.get('/api/debug/classes-data', async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        const user = await usersCollection.findOne({ email });
+        const classes = await classesCollection.find({ instructorEmail: email }).toArray();
+        const totalClasses = await classesCollection.countDocuments();
+        const totalUsers = await usersCollection.countDocuments();
+        
+        res.send({
+          success: true,
+          debug: {
+            user: {
+              exists: !!user,
+              email: user?.email,
+              role: user?.role,
+              name: user?.name
+            },
+            classes: {
+              count: classes.length,
+              data: classes
+            },
+            database: {
+              totalClasses,
+              totalUsers,
+              status: 'connected'
+            }
+          }
+        });
+        
+      } catch (error) {
+        console.error('Debug error:', error);
+        res.status(500).send({
+          success: false,
+          error: error.message,
+          stack: error.stack
+        });
+      }
+    });
+
     // Emergency endpoint untuk update role user
     app.patch('/api/emergency/update-role/:email', async (req, res) => {
       try {
@@ -698,7 +842,6 @@ async function run() {
           });
         }
         
-        // Cek apakah user exists
         const existingUser = await usersCollection.findOne({ email: req.params.email });
         if (!existingUser) {
           return res.status(404).send({ 
@@ -712,7 +855,6 @@ async function run() {
           { $set: { role: role } }
         );
         
-        // Get updated user
         const updatedUser = await usersCollection.findOne({ email: req.params.email });
         
         res.send({ 
@@ -731,38 +873,38 @@ async function run() {
       }
     });
 
-    // Bulk update semua user yang missing role
-    app.patch('/api/emergency/fix-all-roles', async (req, res) => {
+    // Health check endpoint
+    app.get('/health', async (req, res) => {
       try {
-        const result = await usersCollection.updateMany(
-          { 
-            $or: [
-              { role: { $exists: false } },
-              { role: null },
-              { role: '' }
-            ]
-          },
-          { $set: { role: "user" } }
-        );
-        
-        res.send({
-          success: true,
-          message: `Berhasil update ${result.modifiedCount} user dengan role default`,
-          result
-        });
+        await client.db("admin").command({ ping: 1 });
+        res.status(200).json({ status: 'OK', database: 'Connected' });
       } catch (error) {
-        console.error('Error bulk updating roles:', error);
-        res.status(500).send({ 
-          success: false, 
-          error: error.message 
-        });
+        res.status(500).json({ status: 'Error', database: 'Disconnected' });
       }
     });
 
+    // Root endpoint
+    app.get('/', (req, res) => {
+      res.send('Frasa ID LMS Server is Running - FIXED VERSION');
+    });
+
+    // 404 Handler
+    app.use('*', (req, res) => {
+      res.status(404).json({ 
+        success: false,
+        message: 'Route not found',
+        path: req.originalUrl
+      });
+    });
+
     // ===== START SERVER =====
-    // PASTIKAN INI DI DALAM run() function
     app.listen(port, () => {
-      console.log(`Server running on port ${port}`);
+      console.log(`✅ Server running on port ${port}`);
+      console.log(`✅ Fixed endpoints available:`);
+      console.log(`   GET /api/instructor/classes?email=user@example.com`);
+      console.log(`   GET /api/classes/:email`);
+      console.log(`   GET /api/instructor/pending-classes?email=user@example.com`);
+      console.log(`   GET /api/instructor/approved-classes?email=user@example.com`);
     });
 
   } catch (error) {
