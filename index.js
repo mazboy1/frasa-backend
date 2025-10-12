@@ -1,4 +1,4 @@
-// server.js - FINAL COMPLETE VERSION
+// server.js - FINAL COMPLETE FIXED VERSION
 const express = require('express');
 const app = express();
 require('dotenv').config();
@@ -138,35 +138,14 @@ async function run() {
       }
     });
 
-    app.delete('/api/delete-user/:id', verifyJWT, verifyAdmin, async (req, res) => {
-      const result = await usersCollection.deleteOne({ _id: new ObjectId(req.params.id) });
-      res.send(result);
-    });
+    // ===== INSTRUCTOR CLASS ROUTES - FINAL FIXED VERSION =====
 
-    app.put('/api/update-user/:id', verifyJWT, verifyAdmin, async (req, res) => {
-      const updateDoc = {
-        $set: {
-          name: req.body.name,
-          email: req.body.email,
-          role: req.body.role,
-          address: req.body.address,
-          about: req.body.about,
-          photoUrl: req.body.photoUrl,
-          skills: req.body.skills || null,
-        }
-      };
-      const result = await usersCollection.updateOne({ _id: new ObjectId(req.params.id) }, updateDoc, { upsert: true });
-      res.send(result);
-    });
-
-    // ===== CLASS ROUTES - YANG DIPERBAIKI =====
-
-    // ✅ ENDPOINT BARU: GET CLASSES BY INSTRUCTOR
-    app.get('/api/instructor/classes', verifyJWT, async (req, res) => {
+    // ✅ ENDPOINT 1: GET ALL INSTRUCTOR CLASSES
+    app.get('/api/instructor/my-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
-        console.log('🔍 AUTH Endpoint - Fetching classes for:', email);
+        console.log('🔍 Instructor MyClasses - Fetching for:', email);
         
         if (!email) {
           return res.status(400).send({ 
@@ -175,7 +154,7 @@ async function run() {
           });
         }
 
-        // Verifikasi bahwa user hanya bisa akses data sendiri
+        // Verifikasi akses
         if (req.decoded.email !== email) {
           return res.status(403).send({ 
             success: false, 
@@ -187,7 +166,7 @@ async function run() {
           instructorEmail: email 
         }).toArray();
 
-        console.log('✅ Found classes:', classes.length);
+        console.log('✅ Instructor MyClasses - Found:', classes.length);
         
         res.send({ 
           success: true, 
@@ -204,80 +183,13 @@ async function run() {
       }
     });
 
-    // ✅ ENDPOINT LAMA: GET CLASSES BY EMAIL
-    app.get('/api/classes/:email', verifyJWT, async (req, res) => {
-      try {
-        const email = req.params.email;
-        
-        console.log('🔍 OLD Endpoint - Fetching classes for:', email);
-        
-        // Verifikasi bahwa user hanya bisa akses data sendiri
-        if (req.decoded.email !== email) {
-          return res.status(403).send({ 
-            success: false, 
-            message: 'Unauthorized access' 
-          });
-        }
-
-        const classes = await classesCollection.find({ 
-          instructorEmail: email 
-        }).toArray();
-
-        console.log('✅ Found classes:', classes.length);
-        
-        res.send(classes);
-        
-      } catch (error) {
-        console.error("❌ Error fetching classes:", error);
-        res.status(500).send({ error: error.message });
-      }
-    });
-
-    // ✅ ENDPOINT UNTUK GET PENDING CLASSES
-    app.get('/api/instructor/pending-classes', verifyJWT, async (req, res) => {
-      try {
-        const email = req.query.email;
-        
-        if (!email) {
-          return res.status(400).send({ 
-            success: false, 
-            message: 'Email parameter required' 
-          });
-        }
-
-        // Verifikasi akses
-        if (req.decoded.email !== email) {
-          return res.status(403).send({ 
-            success: false, 
-            message: 'Unauthorized access' 
-          });
-        }
-
-        const classes = await classesCollection.find({ 
-          instructorEmail: email,
-          status: 'pending'
-        }).toArray();
-
-        res.send({ 
-          success: true, 
-          classes: classes,
-          total: classes.length 
-        });
-        
-      } catch (error) {
-        console.error("Error fetching pending classes:", error);
-        res.status(500).send({ 
-          success: false, 
-          error: error.message 
-        });
-      }
-    });
-
-    // ✅ ENDPOINT UNTUK GET APPROVED CLASSES
+    // ✅ ENDPOINT 2: GET APPROVED CLASSES BY INSTRUCTOR
     app.get('/api/instructor/approved-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
+        console.log('🔍 Instructor ApprovedClasses - Fetching for:', email);
+        
         if (!email) {
           return res.status(400).send({ 
             success: false, 
@@ -285,7 +197,6 @@ async function run() {
           });
         }
 
-        // Verifikasi akses
         if (req.decoded.email !== email) {
           return res.status(403).send({ 
             success: false, 
@@ -298,6 +209,8 @@ async function run() {
           status: 'approved'
         }).toArray();
 
+        console.log('✅ Instructor ApprovedClasses - Found:', classes.length);
+        
         res.send({ 
           success: true, 
           classes: classes,
@@ -305,7 +218,7 @@ async function run() {
         });
         
       } catch (error) {
-        console.error("Error fetching approved classes:", error);
+        console.error("❌ Error fetching approved classes:", error);
         res.status(500).send({ 
           success: false, 
           error: error.message 
@@ -313,8 +226,122 @@ async function run() {
       }
     });
 
-    // ✅ ENDPOINT TESTING TANPA AUTH
-    app.get('/api/test/classes/:email', async (req, res) => {
+    // ✅ ENDPOINT 3: GET PENDING CLASSES BY INSTRUCTOR
+    app.get('/api/instructor/pending-classes', verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        console.log('🔍 Instructor PendingClasses - Fetching for:', email);
+        
+        if (!email) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email,
+          status: 'pending'
+        }).toArray();
+
+        console.log('✅ Instructor PendingClasses - Found:', classes.length);
+        
+        res.send({ 
+          success: true, 
+          classes: classes,
+          total: classes.length 
+        });
+        
+      } catch (error) {
+        console.error("❌ Error fetching pending classes:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ ENDPOINT 4: GET REJECTED CLASSES BY INSTRUCTOR
+    app.get('/api/instructor/rejected-classes', verifyJWT, async (req, res) => {
+      try {
+        const email = req.query.email;
+        
+        console.log('🔍 Instructor RejectedClasses - Fetching for:', email);
+        
+        if (!email) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email,
+          status: 'rejected'
+        }).toArray();
+
+        console.log('✅ Instructor RejectedClasses - Found:', classes.length);
+        
+        res.send({ 
+          success: true, 
+          classes: classes,
+          total: classes.length 
+        });
+        
+      } catch (error) {
+        console.error("❌ Error fetching rejected classes:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ ENDPOINT 5: COMPATIBILITY ENDPOINT (OLD)
+    app.get('/api/classes/:email', verifyJWT, async (req, res) => {
+      try {
+        const email = req.params.email;
+        
+        console.log('🔍 OLD Endpoint - Fetching classes for:', email);
+        
+        if (req.decoded.email !== email) {
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized access' 
+          });
+        }
+
+        const classes = await classesCollection.find({ 
+          instructorEmail: email 
+        }).toArray();
+
+        console.log('✅ OLD Endpoint - Found classes:', classes.length);
+        
+        res.send(classes);
+        
+      } catch (error) {
+        console.error("❌ Error fetching classes:", error);
+        res.status(500).send({ error: error.message });
+      }
+    });
+
+    // ✅ ENDPOINT 6: TESTING ENDPOINT (NO AUTH)
+    app.get('/api/test/instructor-classes/:email', async (req, res) => {
       try {
         const email = req.params.email;
         
@@ -530,22 +557,6 @@ async function run() {
       }
     });
 
-    app.delete('/api/delete-cart-item/:id', verifyJWT, async (req, res) => {
-      try {
-        const result = await cartCollection.deleteOne({ 
-          classId: req.params.id 
-        });
-        
-        res.send({ 
-          success: true, 
-          deletedCount: result.deletedCount 
-        });
-      } catch (error) {
-        console.error("Error deleting cart item:", error);
-        res.status(500).send({ error: error.message });
-      }
-    });
-
     // ===== PAYMENT ROUTES =====
     app.post('/api/create-payment-intent', async (req, res) => {
       try {
@@ -565,63 +576,6 @@ async function run() {
         console.error("Error creating payment intent:", error);
         res.status(500).send({ error: error.message });
       }
-    });
-
-    app.post('/api/payment-info', verifyJWT, async (req, res) => {
-      try {
-        const { classesId, userEmail, transactionId, amount } = req.body;
-        const singleClassId = req.query.classId;
-
-        const classesToProcess = singleClassId 
-          ? [new ObjectId(singleClassId)] 
-          : classesId.map(id => new ObjectId(id));
-
-        const updateOperations = classesToProcess.map(classId => {
-          return classesCollection.updateOne(
-            { _id: classId },
-            { 
-              $inc: { 
-                totalEnrolled: 1,
-                availableSeats: -1
-              } 
-            }
-          );
-        });
-
-        await Promise.all(updateOperations);
-
-        const paymentResult = await paymentCollection.insertOne(req.body);
-
-        const deleteQuery = singleClassId
-          ? { classId: singleClassId, userMail: userEmail }
-          : { classId: { $in: classesId }, userMail: userEmail };
-
-        await cartCollection.deleteMany(deleteQuery);
-
-        const enrolledData = {
-          userEmail,
-          classesId: classesToProcess,
-          transactionId,
-          enrolledDate: new Date(),
-          status: 'active'
-        };
-
-        await enrolledCollection.insertOne(enrolledData);
-
-        res.send({ 
-          success: true,
-          message: 'Payment processed successfully'
-        });
-
-      } catch (error) {
-        console.error("Error processing payment:", error);
-        res.status(500).send({ error: error.message });
-      }
-    });
-
-    app.get('/api/payment-history/:email', async (req, res) => {
-      const result = await paymentCollection.find({ userEmail: req.params.email }).sort({ date: -1 }).toArray();
-      res.send(result);
     });
 
     // ===== STATS ROUTES =====
@@ -668,17 +622,6 @@ async function run() {
         console.error("Error fetching enrolled classes:", error);
         res.status(500).send({ error: error.message });
       }
-    });
-
-    // ===== APPLIED INSTRUCTOR ROUTES =====
-    app.post('/api/as-instructor', async (req, res) => {
-      const result = await appliedCollection.insertOne(req.body);
-      res.send(result);
-    });
-
-    app.get('/api/applied-instructors/:email', async (req, res) => {
-      const result = await appliedCollection.findOne({ email: req.params.email });
-      res.send(result);
     });
 
     // ===== DEBUG ROUTES =====
@@ -755,16 +698,17 @@ async function run() {
 
     // Root endpoint
     app.get('/', (req, res) => {
-      res.send('Frasa ID LMS Server is Running - FIXED VERSION');
+      res.send('Frasa ID LMS Server is Running - FINAL FIXED VERSION');
     });
 
     // Start server
     app.listen(port, () => {
       console.log(`✅ Server running on port ${port}`);
-      console.log(`✅ Fixed endpoints available:`);
-      console.log(`   GET /api/instructor/classes?email=user@example.com`);
-      console.log(`   GET /api/classes/:email`);
-      console.log(`   GET /api/test/classes/:email`);
+      console.log(`✅ FIXED INSTRUCTOR ENDPOINTS AVAILABLE:`);
+      console.log(`   GET /api/instructor/my-classes?email=user@example.com`);
+      console.log(`   GET /api/instructor/approved-classes?email=user@example.com`);
+      console.log(`   GET /api/instructor/pending-classes?email=user@example.com`);
+      console.log(`   GET /api/instructor/rejected-classes?email=user@example.com`);
     });
 
   } catch (error) {
