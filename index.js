@@ -23,17 +23,41 @@ const client = new MongoClient(uri, {
   }
 });
 
-// JWT Middleware
+// JWT Middleware - IMPROVED WITH BETTER LOGGING
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
+  console.log('🔐 JWT Verification - Headers:', req.headers);
+  console.log('🔐 Authorization header:', authorization);
+  
   if (!authorization) {
-    return res.status(401).send({ message: 'Invalid authorization' });
+    console.log('❌ No authorization header provided');
+    return res.status(401).send({ 
+      success: false,
+      message: 'No authorization token provided' 
+    });
   }
+  
   const token = authorization.split(' ')[1];
+  console.log('🔐 Token extracted:', token ? `${token.substring(0, 20)}...` : 'No token');
+  
+  if (!token) {
+    console.log('❌ No token found in authorization header');
+    return res.status(401).send({ 
+      success: false,
+      message: 'Invalid authorization format' 
+    });
+  }
+
   jwt.verify(token, process.env.ASSESS_SECRET, (err, decoded) => {
     if (err) {
-      return res.status(403).send({ message: 'Forbidden access' });
+      console.log('❌ JWT Verification failed:', err.message);
+      return res.status(403).send({ 
+        success: false,
+        message: 'Forbidden access - Invalid token' 
+      });
     }
+    
+    console.log('✅ JWT Verified for email:', decoded.email);
     req.decoded = decoded;
     next();
   });
@@ -44,14 +68,25 @@ const verifyAdmin = async (req, res, next) => {
   try {
     const email = req.decoded.email;
     const user = await usersCollection.findOne({ email });
+    
+    console.log('🔐 Admin verification for:', email);
+    console.log('🔐 User role:', user?.role);
+    
     if (user?.role === 'admin') {
       next();
     } else {
-      return res.status(401).send({ message: 'Unauthorized access' });
+      console.log('❌ Admin access denied for:', email);
+      return res.status(401).send({ 
+        success: false,
+        message: 'Unauthorized admin access' 
+      });
     }
   } catch (error) {
     console.error("Admin verification error:", error);
-    return res.status(500).send({ message: 'Server error' });
+    return res.status(500).send({ 
+      success: false,
+      message: 'Server error during admin verification' 
+    });
   }
 };
 
@@ -60,23 +95,31 @@ const verifyInstructor = async (req, res, next) => {
     const email = req.decoded.email;
     const user = await usersCollection.findOne({ email });
     
+    console.log('🔐 Instructor verification for:', email);
+    console.log('🔐 User role:', user?.role);
+    
     if (user?.role === 'instructor' || user?.role === 'admin') {
       next();
     } else {
+      console.log('❌ Instructor access denied for:', email);
       return res.status(403).send({ 
+        success: false,
         message: 'Hanya instructor yang dapat mengakses fitur ini' 
       });
     }
   } catch (error) {
     console.error("Instructor verification error:", error);
-    return res.status(500).send({ message: 'Server error' });
+    return res.status(500).send({ 
+      success: false,
+      message: 'Server error during instructor verification' 
+    });
   }
 };
 
 async function run() {
   try {
     await client.connect();
-    console.log("Connected to MongoDB!");
+    console.log("✅ Connected to MongoDB!");
 
     // Database Collections
     const database = client.db("frasa-id-lms");
@@ -90,23 +133,52 @@ async function run() {
 
     // ===== USER ROUTES =====
     app.post('/api/set-token', async (req, res) => {
-      const token = jwt.sign(req.body, process.env.ASSESS_SECRET || "rahasia", { expiresIn: '24h' });
-      res.send({ token });
+      try {
+        console.log('🔐 Setting token for:', req.body.email);
+        const token = jwt.sign(req.body, process.env.ASSESS_SECRET || "rahasia", { expiresIn: '24h' });
+        res.send({ 
+          success: true,
+          token 
+        });
+      } catch (error) {
+        console.error('❌ Token creation error:', error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.post('/api/new-user', async (req, res) => {
-      const result = await usersCollection.insertOne(req.body);
-      res.send(result);
+      try {
+        const result = await usersCollection.insertOne(req.body);
+        res.send({ 
+          success: true,
+          data: result 
+        });
+      } catch (error) {
+        console.error('❌ New user error:', error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/users', async (req, res) => {
-      const result = await usersCollection.find({}).toArray();
-      res.send(result);
-    });
-
-    app.get('/api/users/:id', async (req, res) => {
-      const result = await usersCollection.findOne({ _id: new ObjectId(req.params.id) });
-      res.send(result);
+      try {
+        const result = await usersCollection.find({}).toArray();
+        res.send({ 
+          success: true,
+          data: result 
+        });
+      } catch (error) {
+        console.error('❌ Get users error:', error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/user/:email', async (req, res) => {
@@ -122,30 +194,37 @@ async function run() {
         }
         
         res.send({
-          _id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role || 'user',
-          photoUrl: user.photoUrl,
-          address: user.address,
-          about: user.about,
-          skills: user.skills,
-          createdAt: user.createdAt
+          success: true,
+          data: {
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role || 'user',
+            photoUrl: user.photoUrl,
+            address: user.address,
+            about: user.about,
+            skills: user.skills,
+            createdAt: user.createdAt
+          }
         });
       } catch (error) {
         console.error("Error fetching user:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
     // ===== INSTRUCTOR CLASS ROUTES - FINAL FIXED VERSION =====
 
-    // ✅ ENDPOINT 1: GET ALL INSTRUCTOR CLASSES
+    // ✅ ENDPOINT 1: GET ALL INSTRUCTOR CLASSES (WITH AUTH)
     app.get('/api/instructor/my-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
         console.log('🔍 Instructor MyClasses - Fetching for:', email);
+        console.log('🔍 Decoded email from token:', req.decoded.email);
         
         if (!email) {
           return res.status(400).send({ 
@@ -154,11 +233,12 @@ async function run() {
           });
         }
 
-        // Verifikasi akses
+        // Verifikasi akses - email dari token harus sama dengan email dari query
         if (req.decoded.email !== email) {
+          console.log('❌ Email mismatch:', req.decoded.email, 'vs', email);
           return res.status(403).send({ 
             success: false, 
-            message: 'Unauthorized access' 
+            message: 'Unauthorized access - Email mismatch' 
           });
         }
 
@@ -166,12 +246,15 @@ async function run() {
           instructorEmail: email 
         }).toArray();
 
-        console.log('✅ Instructor MyClasses - Found:', classes.length);
+        console.log('✅ Instructor MyClasses - Found:', classes.length, 'classes');
         
         res.send({ 
           success: true, 
-          classes: classes,
-          total: classes.length
+          data: {
+            classes: classes,
+            total: classes.length,
+            instructor: email
+          }
         });
         
       } catch (error) {
@@ -213,8 +296,10 @@ async function run() {
         
         res.send({ 
           success: true, 
-          classes: classes,
-          total: classes.length 
+          data: {
+            classes: classes,
+            total: classes.length 
+          }
         });
         
       } catch (error) {
@@ -256,8 +341,10 @@ async function run() {
         
         res.send({ 
           success: true, 
-          classes: classes,
-          total: classes.length 
+          data: {
+            classes: classes,
+            total: classes.length 
+          }
         });
         
       } catch (error) {
@@ -299,8 +386,10 @@ async function run() {
         
         res.send({ 
           success: true, 
-          classes: classes,
-          total: classes.length 
+          data: {
+            classes: classes,
+            total: classes.length 
+          }
         });
         
       } catch (error) {
@@ -312,12 +401,13 @@ async function run() {
       }
     });
 
-    // ✅ ENDPOINT 5: COMPATIBILITY ENDPOINT (OLD)
+    // ✅ ENDPOINT 5: COMPATIBILITY ENDPOINT (OLD) - WITH AUTH
     app.get('/api/classes/:email', verifyJWT, async (req, res) => {
       try {
         const email = req.params.email;
         
         console.log('🔍 OLD Endpoint - Fetching classes for:', email);
+        console.log('🔍 Decoded email:', req.decoded.email);
         
         if (req.decoded.email !== email) {
           return res.status(403).send({ 
@@ -332,15 +422,21 @@ async function run() {
 
         console.log('✅ OLD Endpoint - Found classes:', classes.length);
         
-        res.send(classes);
+        res.send({ 
+          success: true,
+          data: classes 
+        });
         
       } catch (error) {
         console.error("❌ Error fetching classes:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
-    // ✅ ENDPOINT 6: TESTING ENDPOINT (NO AUTH)
+    // ✅ ENDPOINT 6: TESTING ENDPOINT (NO AUTH) - FOR DEBUGGING
     app.get('/api/test/instructor-classes/:email', async (req, res) => {
       try {
         const email = req.params.email;
@@ -362,17 +458,37 @@ async function run() {
         
         res.send({ 
           success: true, 
-          classes: classes,
-          total: classes.length,
-          debug: {
-            email: email,
-            collection: "classes",
-            query: { instructorEmail: email }
+          data: {
+            classes: classes,
+            total: classes.length,
+            debug: {
+              email: email,
+              collection: "classes",
+              query: { instructorEmail: email },
+              noAuth: true
+            }
           }
         });
         
       } catch (error) {
         console.error("❌ TEST Error:", error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ ENDPOINT 7: TEST AUTH ENDPOINT
+    app.get('/api/test-auth', verifyJWT, async (req, res) => {
+      try {
+        res.send({
+          success: true,
+          message: 'Authentication successful',
+          user: req.decoded
+        });
+      } catch (error) {
+        console.error("❌ Test auth error:", error);
         res.status(500).send({ 
           success: false, 
           error: error.message 
@@ -405,21 +521,50 @@ async function run() {
         };
 
         const result = await classesCollection.insertOne(classData);
-        res.send({ success: true, data: result });
+        res.send({ 
+          success: true, 
+          data: result,
+          message: 'Class created successfully'
+        });
       } catch (error) {
         console.error("Error adding class:", error);
-        res.status(500).send({ success: false, error: error.message });
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
       }
     });
 
     app.get('/api/classes', async (req, res) => {
-      const result = await classesCollection.find({ status: 'approved' }).toArray();
-      res.send(result);
+      try {
+        const result = await classesCollection.find({ status: 'approved' }).toArray();
+        res.send({ 
+          success: true,
+          data: result 
+        });
+      } catch (error) {
+        console.error("Error fetching classes:", error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/classes-manage', async (req, res) => {
-      const result = await classesCollection.find().toArray();
-      res.send(result);
+      try {
+        const result = await classesCollection.find().toArray();
+        res.send({ 
+          success: true,
+          data: result 
+        });
+      } catch (error) {
+        console.error("Error fetching all classes:", error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/class/:id', async (req, res) => {
@@ -429,13 +574,22 @@ async function run() {
         });
         
         if (!result) {
-          return res.status(404).send({ error: 'Class not found' });
+          return res.status(404).send({ 
+            success: false,
+            error: 'Class not found' 
+          });
         }
         
-        res.send(result);
+        res.send({ 
+          success: true,
+          data: result 
+        });
       } catch (error) {
         console.error("Error fetching class:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
@@ -443,12 +597,18 @@ async function run() {
       try {
         const id = req.params.id;
         if (!ObjectId.isValid(id)) {
-          return res.status(400).json({ error: 'ID tidak valid' });
+          return res.status(400).json({ 
+            success: false,
+            error: 'ID tidak valid' 
+          });
         }
 
         const { status, reason } = req.body;
         if (!['approved', 'rejected', 'pending'].includes(status)) {
-          return res.status(400).json({ error: 'Status tidak valid' });
+          return res.status(400).json({ 
+            success: false,
+            error: 'Status tidak valid' 
+          });
         }
 
         const updateDoc = { $set: { status } };
@@ -461,13 +621,23 @@ async function run() {
         );
 
         if (result.matchedCount === 0) {
-          return res.status(404).json({ error: 'Kelas tidak ditemukan' });
+          return res.status(404).json({ 
+            success: false,
+            error: 'Kelas tidak ditemukan' 
+          });
         }
 
-        res.json({ success: true, result });
+        res.json({ 
+          success: true, 
+          data: result,
+          message: `Class status updated to ${status}`
+        });
       } catch (err) {
         console.error('Error updating status:', err);
-        res.status(500).json({ error: 'Server error' });
+        res.status(500).json({ 
+          success: false,
+          error: 'Server error' 
+        });
       }
     });
 
@@ -496,10 +666,17 @@ async function run() {
           updateDoc
         );
         
-        res.send({ success: true, result });
+        res.send({ 
+          success: true, 
+          data: result,
+          message: 'Class updated successfully'
+        });
       } catch (error) {
         console.error("Error updating class:", error);
-        res.status(500).send({ success: false, error: error.message });
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
       }
     });
 
@@ -528,7 +705,10 @@ async function run() {
         
         res.send({ 
           success: true, 
-          insertedId: result.insertedId 
+          data: {
+            insertedId: result.insertedId 
+          },
+          message: 'Class added to cart successfully'
         });
       } catch (error) {
         console.error("Error adding to cart:", error);
@@ -550,10 +730,16 @@ async function run() {
           _id: { $in: classIds } 
         }).toArray();
         
-        res.send(result);
+        res.send({ 
+          success: true,
+          data: result 
+        });
       } catch (error) {
         console.error("Error fetching cart:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
@@ -570,28 +756,62 @@ async function run() {
         });
 
         res.send({
-          clientSecret: paymentIntent.client_secret
+          success: true,
+          data: {
+            clientSecret: paymentIntent.client_secret
+          }
         });
       } catch (error) {
         console.error("Error creating payment intent:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
     // ===== STATS ROUTES =====
     app.get('/api/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
-      const approvedClasses = await classesCollection.countDocuments({ status: 'approved' });
-      const pendingClasses = await classesCollection.countDocuments({ status: 'pending' });
-      const instructors = await usersCollection.countDocuments({ role: 'instructor' });
-      const totalClasses = await classesCollection.countDocuments();
-      const totalEnrolled = await enrolledCollection.countDocuments();
-      
-      res.send({ approvedClasses, pendingClasses, instructors, totalClasses, totalEnrolled });
+      try {
+        const approvedClasses = await classesCollection.countDocuments({ status: 'approved' });
+        const pendingClasses = await classesCollection.countDocuments({ status: 'pending' });
+        const instructors = await usersCollection.countDocuments({ role: 'instructor' });
+        const totalClasses = await classesCollection.countDocuments();
+        const totalEnrolled = await enrolledCollection.countDocuments();
+        
+        res.send({ 
+          success: true,
+          data: {
+            approvedClasses, 
+            pendingClasses, 
+            instructors, 
+            totalClasses, 
+            totalEnrolled 
+          }
+        });
+      } catch (error) {
+        console.error("Error fetching admin stats:", error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/instructors', async (req, res) => {
-      const result = await usersCollection.find({ role: 'instructor' }).toArray();
-      res.send(result);
+      try {
+        const result = await usersCollection.find({ role: 'instructor' }).toArray();
+        res.send({ 
+          success: true,
+          data: result 
+        });
+      } catch (error) {
+        console.error("Error fetching instructors:", error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
     });
 
     app.get('/api/enrolled-classes/:email', verifyJWT, async (req, res) => {
@@ -617,10 +837,16 @@ async function run() {
         ];
         
         const result = await enrolledCollection.aggregate(pipeline).toArray();
-        res.send(result);
+        res.send({ 
+          success: true,
+          data: result 
+        });
       } catch (error) {
         console.error("Error fetching enrolled classes:", error);
-        res.status(500).send({ error: error.message });
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
       }
     });
 
@@ -642,7 +868,11 @@ async function run() {
           debug: {
             hasRole: !!user.role,
             roleValue: user.role,
-            isRoleValid: ['admin', 'instructor', 'user'].includes(user.role)
+            isRoleValid: ['admin', 'instructor', 'user'].includes(user.role),
+            collections: {
+              users: await usersCollection.countDocuments(),
+              classes: await classesCollection.countDocuments({ instructorEmail: user.email })
+            }
           }
         });
       } catch (error) {
@@ -663,7 +893,7 @@ async function run() {
         
         res.send({
           success: true,
-          debug: {
+          data: {
             user: {
               exists: !!user,
               email: user?.email,
@@ -690,15 +920,25 @@ async function run() {
     app.get('/health', async (req, res) => {
       try {
         await client.db("admin").command({ ping: 1 });
-        res.status(200).json({ status: 'OK', database: 'Connected' });
+        res.status(200).json({ 
+          success: true,
+          status: 'OK', 
+          database: 'Connected',
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
-        res.status(500).json({ status: 'Error', database: 'Disconnected' });
+        res.status(500).json({ 
+          success: false,
+          status: 'Error', 
+          database: 'Disconnected',
+          error: error.message
+        });
       }
     });
 
     // Root endpoint
     app.get('/', (req, res) => {
-      res.send('Frasa ID LMS Server is Running - FINAL FIXED VERSION');
+      res.send('🚀 Frasa ID LMS Server is Running - FINAL FIXED VERSION');
     });
 
     // Start server
@@ -709,10 +949,12 @@ async function run() {
       console.log(`   GET /api/instructor/approved-classes?email=user@example.com`);
       console.log(`   GET /api/instructor/pending-classes?email=user@example.com`);
       console.log(`   GET /api/instructor/rejected-classes?email=user@example.com`);
+      console.log(`   GET /api/test/instructor-classes/user@example.com (NO AUTH)`);
+      console.log(`   GET /api/test-auth (TEST AUTH)`);
     });
 
   } catch (error) {
-    console.error("Failed to connect to MongoDB", error);
+    console.error("❌ Failed to connect to MongoDB", error);
   }
 }
 
