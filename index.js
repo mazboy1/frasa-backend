@@ -181,40 +181,108 @@ async function run() {
       }
     });
 
-    app.get('/api/user/:email', async (req, res) => {
-      try {
-        const user = await usersCollection.findOne({ email: req.params.email });
-        console.log('🔍 User data for:', req.params.email, user);
-        
-        if (!user) {
-          return res.status(404).send({ 
-            success: false, 
-            message: "User tidak ditemukan" 
-          });
-        }
-        
-        res.send({
-          success: true,
-          data: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role || 'user',
-            photoUrl: user.photoUrl,
-            address: user.address,
-            about: user.about,
-            skills: user.skills,
-            createdAt: user.createdAt
-          }
-        });
-      } catch (error) {
-        console.error("Error fetching user:", error);
-        res.status(500).send({ 
-          success: false,
-          error: error.message 
+   app.get('/api/user/:email', async (req, res) => {
+    try {
+      const email = req.params.email;
+      console.log('🔍 Fetching user data for:', email);
+      
+      if (!email) {
+        return res.status(400).send({ 
+          success: false, 
+          message: "Email parameter required" 
         });
       }
+
+      const user = await usersCollection.findOne({ email });
+      
+      if (!user) {
+        console.log('⚠️ User not found in database:', email);
+        return res.status(404).send({ 
+          success: false, 
+          message: "User tidak ditemukan di database" 
+        });
+      }
+
+      console.log('✅ User found:', {
+        email: user.email,
+        name: user.name,
+        role: user.role || 'user'
+      });
+
+      // Pastikan selalu mengembalikan role
+      const userData = {
+        _id: user._id,
+        name: user.name || '',
+        email: user.email,
+        role: user.role || 'user', // Default ke 'user' jika tidak ada
+        photoUrl: user.photoUrl || '',
+        address: user.address || '',
+        about: user.about || '',
+        skills: user.skills || '',
+        phone: user.phone || '',
+        createdAt: user.createdAt || new Date()
+      };
+
+      res.send({
+        success: true,
+        data: userData
+      });
+      
+    } catch (error) {
+      console.error("❌ Error fetching user:", error);
+      res.status(500).send({ 
+        success: false,
+        message: "Server error",
+        error: error.message 
+      });
+    }
+  });
+// POST /api/set-token - PERBAIKI ENDPOINT INI
+app.post('/api/set-token', async (req, res) => {
+  try {
+    const { email, name, role } = req.body;
+    
+    console.log('🔐 Setting token for:', email, 'with role:', role);
+
+    // Ambil role dari database jika tidak disediakan
+    let userRole = role;
+    if (!userRole) {
+      const user = await usersCollection.findOne({ email });
+      userRole = user?.role || 'user';
+    }
+
+    const tokenData = {
+      email,
+      name,
+      role: userRole,
+      iat: Math.floor(Date.now() / 1000)
+    };
+
+    const token = jwt.sign(
+      tokenData, 
+      process.env.ASSESS_SECRET || "rahasia", 
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Token created for role:', userRole);
+    
+    res.send({ 
+      success: true,
+      token,
+      user: {
+        email,
+        name,
+        role: userRole
+      }
     });
+  } catch (error) {
+    console.error('❌ Token creation error:', error);
+    res.status(500).send({ 
+      success: false,
+      error: error.message 
+    });
+  }
+});
 
     // ===== INSTRUCTOR CLASS ROUTES - FINAL FIXED VERSION =====
 
