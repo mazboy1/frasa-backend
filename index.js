@@ -1,4 +1,3 @@
-// server.js - FINAL VERSION (TANPA DUPLIKASI)
 const express = require('express');
 const app = express();
 require('dotenv').config();
@@ -240,6 +239,65 @@ async function run() {
         res.status(500).send({ 
           success: false,
           message: "Server error",
+          error: error.message 
+        });
+      }
+    });
+
+    // ===== INSTRUCTOR ROUTES =====
+    
+    // ✅ GET SEMUA INSTRUCTOR
+    app.get('/api/instructors', async (req, res) => {
+      try {
+        console.log('🔍 Fetching all instructors...');
+        
+        const instructors = await usersCollection.find({ role: 'instructor' }).toArray();
+        
+        console.log(`✅ Found ${instructors.length} instructors`);
+        
+        res.send({ 
+          success: true,
+          data: instructors,
+          total: instructors.length
+        });
+      } catch (error) {
+        console.error('❌ Error fetching instructors:', error);
+        res.status(500).send({ 
+          success: false,
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ GET INSTRUCTOR BY ID
+    app.get('/api/instructor/:id', async (req, res) => {
+      try {
+        const instructorId = req.params.id;
+        console.log('🔍 Fetching instructor:', instructorId);
+        
+        const instructor = await usersCollection.findOne({ 
+          _id: new ObjectId(instructorId),
+          role: 'instructor'
+        });
+        
+        if (!instructor) {
+          return res.status(404).send({ 
+            success: false, 
+            message: "Instructor tidak ditemukan" 
+          });
+        }
+
+        console.log('✅ Instructor found:', instructor.email);
+        
+        res.send({
+          success: true,
+          data: instructor
+        });
+        
+      } catch (error) {
+        console.error("❌ Error fetching instructor:", error);
+        res.status(500).send({ 
+          success: false,
           error: error.message 
         });
       }
@@ -490,6 +548,8 @@ async function run() {
       console.log(`✅ Server running on port ${port}`);
       console.log(`✅ Endpoint tersedia:`);
       console.log(`   GET /api/user/:email - Ambil data user`);
+      console.log(`   GET /api/instructors - Ambil semua instructor`);
+      console.log(`   GET /api/instructor/:id - Ambil detail instructor`);
       console.log(`   POST /api/set-token - Buat token dengan role dari database`);
     });
 
