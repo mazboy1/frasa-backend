@@ -361,32 +361,69 @@ async function run() {
       try {
         const email = req.query.email;
         
-        console.log('🔄 Instructor my-classes - Fetching for:', email);
-        console.log('🔐 Decoded email:', req.decoded.email);
+        console.log('===== /api/instructor/my-classes =====');
+        console.log('Query email:', email);
+        console.log('req.decoded:', req.decoded);
+        console.log('classesCollection initialized:', !!classesCollection);
         
-        if (!email || req.decoded.email !== email) {
-          console.warn('⚠️ Unauthorized access attempt');
-          return res.status(403).send({ success: false, message: 'Unauthorized' });
+        // Validasi req.decoded
+        if (!req.decoded) {
+          console.error('❌ req.decoded is undefined or null');
+          return res.status(401).send({ 
+            success: false, 
+            message: 'Token validation failed' 
+          });
+        }
+        
+        const decodedEmail = req.decoded.email;
+        console.log('Decoded email:', decodedEmail);
+        
+        if (!email) {
+          console.error('❌ Missing email query parameter');
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Email parameter required' 
+          });
+        }
+        
+        if (decodedEmail !== email) {
+          console.warn(`⚠️ Email mismatch: ${decodedEmail} !== ${email}`);
+          return res.status(403).send({ 
+            success: false, 
+            message: 'Unauthorized - Email mismatch' 
+          });
         }
 
         if (!classesCollection) {
           console.error('❌ classesCollection tidak di-initialize');
-          return res.status(500).send({ success: false, message: 'Database connection error' });
+          return res.status(500).send({ 
+            success: false, 
+            message: 'Database connection error' 
+          });
         }
 
-        console.log('🔍 Querying classes with instructorEmail:', email);
-        
+        console.log('🔍 Executing query...');
         const classes = await classesCollection.find({ instructorEmail: email }).toArray();
         
-        console.log(`✅ Found ${classes.length} classes for instructor`);
+        console.log(`✅ Query successful. Found ${classes.length} classes`);
+        console.log('Classes data:', JSON.stringify(classes, null, 2));
         
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        console.error('❌ Error in my-classes endpoint:', error);
+        console.error('===== ERROR in my-classes =====');
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Full error:', JSON.stringify(error, null, 2));
+        console.error('Stack:', error.stack);
+        console.error('==============================');
+        
         res.status(500).send({ 
           success: false, 
           error: error.message,
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+          errorCode: error.code,
+          errorName: error.name,
+          stack: error.stack
         });
       }
     });
