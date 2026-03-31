@@ -358,72 +358,68 @@ async function run() {
 
     // ===== INSTRUCTOR CLASS ROUTES =====
     app.get('/api/instructor/my-classes', verifyJWT, async (req, res) => {
+      console.log('===== REQUEST RECEIVED =====');
+      console.log('Time:', new Date().toISOString());
+      console.log('Email param:', req.query.email);
+      console.log('Decoded:', req.decoded);
+      console.log('Collections ready:', {
+        users: !!usersCollection,
+        classes: !!classesCollection
+      });
+      
       try {
         const email = req.query.email;
         
-        console.log('===== /api/instructor/my-classes =====');
-        console.log('Query email:', email);
-        console.log('req.decoded:', req.decoded);
-        console.log('classesCollection initialized:', !!classesCollection);
-        
-        // Validasi req.decoded
-        if (!req.decoded) {
-          console.error('❌ req.decoded is undefined or null');
-          return res.status(401).send({ 
-            success: false, 
-            message: 'Token validation failed' 
-          });
-        }
-        
-        const decodedEmail = req.decoded.email;
-        console.log('Decoded email:', decodedEmail);
-        
+        // Validate input
         if (!email) {
-          console.error('❌ Missing email query parameter');
-          return res.status(400).send({ 
+          return res.status(400).json({ 
             success: false, 
             message: 'Email parameter required' 
           });
         }
-        
-        if (decodedEmail !== email) {
-          console.warn(`⚠️ Email mismatch: ${decodedEmail} !== ${email}`);
-          return res.status(403).send({ 
+
+        // Check authorization
+        if (req.decoded.email !== email) {
+          return res.status(403).json({ 
             success: false, 
-            message: 'Unauthorized - Email mismatch' 
+            message: 'Unauthorized' 
           });
         }
 
+        // Check collections
         if (!classesCollection) {
-          console.error('❌ classesCollection tidak di-initialize');
-          return res.status(500).send({ 
+          console.error('❌ CRITICAL: classesCollection is null');
+          return res.status(500).json({ 
             success: false, 
-            message: 'Database connection error' 
+            message: 'Database not initialized' 
           });
         }
 
-        console.log('🔍 Executing query...');
+        // Query database
+        console.log('🔍 Querying classes for:', email);
         const classes = await classesCollection.find({ instructorEmail: email }).toArray();
+        console.log('✅ Query success. Classes found:', classes.length);
         
-        console.log(`✅ Query successful. Found ${classes.length} classes`);
-        console.log('Classes data:', JSON.stringify(classes, null, 2));
+        return res.status(200).json({ 
+          success: true, 
+          data: { 
+            classes, 
+            total: classes.length 
+          } 
+        });
         
-        res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        console.error('===== ERROR in my-classes =====');
-        console.error('Error name:', error.name);
-        console.error('Error message:', error.message);
-        console.error('Error code:', error.code);
-        console.error('Full error:', JSON.stringify(error, null, 2));
-        console.error('Stack:', error.stack);
-        console.error('==============================');
+        console.error('❌ EXCEPTION:', {
+          message: error.message,
+          code: error.code,
+          name: error.name,
+          stack: error.stack
+        });
         
-        res.status(500).send({ 
+        return res.status(500).json({ 
           success: false, 
           error: error.message,
-          errorCode: error.code,
-          errorName: error.name,
-          stack: error.stack
+          type: error.name
         });
       }
     });
