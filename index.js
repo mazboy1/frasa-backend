@@ -22,6 +22,15 @@ const client = new MongoClient(uri, {
   }
 });
 
+// ✅ GLOBAL COLLECTIONS (akan di-assign dalam run())
+let usersCollection;
+let classesCollection;
+let cartCollection;
+let paymentCollection;
+let enrolledCollection;
+let appliedCollection;
+let feedbackCollection;
+
 // JWT Middleware
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
@@ -55,13 +64,12 @@ const verifyJWT = (req, res, next) => {
   });
 };
 
-// ✅ PERBAIKAN: Role Middleware dengan error handling yang lebih baik
+// ✅ Role Middleware with proper error handling
 const verifyAdmin = async (req, res, next) => {
   try {
     const email = req.decoded?.email;
     
     if (!email) {
-      console.warn('⚠️ No email in decoded token');
       return res.status(401).send({ 
         success: false,
         message: 'No email in token' 
@@ -71,7 +79,6 @@ const verifyAdmin = async (req, res, next) => {
     const user = await usersCollection.findOne({ email });
     
     if (!user) {
-      console.warn('⚠️ User not found in database:', email);
       return res.status(404).send({ 
         success: false,
         message: 'User not found in database' 
@@ -79,10 +86,8 @@ const verifyAdmin = async (req, res, next) => {
     }
     
     if (user?.role === 'admin') {
-      console.log('✅ Admin verified:', email);
       next();
     } else {
-      console.warn('⚠️ User is not admin:', email, 'role:', user.role);
       return res.status(403).send({ 
         success: false,
         message: 'Unauthorized admin access' 
@@ -98,38 +103,42 @@ const verifyAdmin = async (req, res, next) => {
   }
 };
 
-// ✅ PERBAIKAN: Instructor Middleware dengan error handling yang lebih baik
 const verifyInstructor = async (req, res, next) => {
   try {
     const email = req.decoded?.email;
     
-    console.log('🔍 Verifying instructor for email:', email);
+    console.log('🔍 [verifyInstructor] Checking:', email);
     
     if (!email) {
-      console.warn('⚠️ No email in decoded token');
       return res.status(401).send({ 
         success: false,
         message: 'No email in token' 
       });
     }
     
+    if (!usersCollection) {
+      console.error('❌ usersCollection not initialized');
+      return res.status(500).send({ 
+        success: false,
+        message: 'Database not initialized' 
+      });
+    }
+    
     const user = await usersCollection.findOne({ email });
     
     if (!user) {
-      console.warn('⚠️ User not found in database:', email);
+      console.warn('⚠️ User not found:', email);
       return res.status(404).send({ 
         success: false,
         message: 'User not found in database' 
       });
     }
     
-    console.log('👤 User found - Role:', user.role);
+    console.log('✅ User found - Role:', user.role);
     
     if (user?.role === 'instructor' || user?.role === 'admin') {
-      console.log('✅ Instructor verified:', email);
       next();
     } else {
-      console.warn('⚠️ User is not instructor:', email, 'role:', user.role);
       return res.status(403).send({ 
         success: false,
         message: 'Hanya instructor yang dapat mengakses fitur ini' 
@@ -150,26 +159,26 @@ async function run() {
     await client.connect();
     console.log("✅ Connected to MongoDB!");
 
-    // Database Collections
+    // ✅ ASSIGN GLOBAL COLLECTIONS
     const database = client.db("frasa-id-lms");
-    const usersCollection = database.collection("users");
-    const classesCollection = database.collection("classes");
-    const cartCollection = database.collection("cart");
-    const paymentCollection = database.collection("payment");
-    const enrolledCollection = database.collection("enrolled");
-    const appliedCollection = database.collection("applied");
-    const feedbackCollection = database.collection("feedback");
+    usersCollection = database.collection("users");
+    classesCollection = database.collection("classes");
+    cartCollection = database.collection("cart");
+    paymentCollection = database.collection("payment");
+    enrolledCollection = database.collection("enrolled");
+    appliedCollection = database.collection("applied");
+    feedbackCollection = database.collection("feedback");
+    
+    console.log("✅ All collections initialized");
 
     // ===== USER ROUTES =====
     
-    // ✅ SET TOKEN - VERSION LENGKAP (HANYA SATU)
     app.post('/api/set-token', async (req, res) => {
       try {
         const { email, name } = req.body;
         
         console.log('🔐 Setting token for:', email);
 
-        // Ambil user dari database untuk mendapatkan role
         const user = await usersCollection.findOne({ email });
         const role = user?.role || 'user';
 
@@ -238,7 +247,6 @@ async function run() {
       }
     });
 
-    // ✅ GET USER BY EMAIL - YANG INI DIPAKAI OLEH useUser HOOK
     app.get('/api/user/:email', async (req, res) => {
       try {
         const email = req.params.email;
@@ -293,7 +301,6 @@ async function run() {
 
     // ===== INSTRUCTOR ROUTES =====
     
-    // ✅ GET SEMUA INSTRUCTOR
     app.get('/api/instructors', async (req, res) => {
       try {
         console.log('🔍 Fetching all instructors...');
@@ -316,7 +323,6 @@ async function run() {
       }
     });
 
-    // ✅ GET INSTRUCTOR BY ID
     app.get('/api/instructor/:id', async (req, res) => {
       try {
         const instructorId = req.params.id;
@@ -363,7 +369,6 @@ async function run() {
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
-        // ✅ DEBUG: Cek apakah collection ada
         if (!classesCollection) {
           console.error('❌ classesCollection tidak di-initialize');
           return res.status(500).send({ success: false, message: 'Database connection error' });
@@ -386,117 +391,60 @@ async function run() {
       }
     });
 
-    // ✅ PERBAIKAN: approved-classes dengan logging lengkap
     app.get('/api/instructor/approved-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
-        console.log('🔄 Instructor approved-classes - Fetching for:', email);
-        console.log('🔐 Decoded email:', req.decoded.email);
-        
         if (!email || req.decoded.email !== email) {
-          console.warn('⚠️ Unauthorized access attempt for approved-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
-        if (!classesCollection) {
-          console.error('❌ classesCollection tidak di-initialize');
-          return res.status(500).send({ success: false, message: 'Database connection error' });
-        }
-
-        console.log('🔍 Querying approved classes with instructorEmail:', email);
-        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'approved'
         }).toArray();
         
-        console.log(`✅ Found ${classes.length} approved classes for instructor`);
-        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        console.error('❌ Error in approved-classes endpoint:', error);
-        res.status(500).send({ 
-          success: false, 
-          error: error.message,
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        res.status(500).send({ success: false, error: error.message });
       }
     });
 
-    // ✅ PERBAIKAN: pending-classes dengan logging lengkap
     app.get('/api/instructor/pending-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
-        console.log('🔄 Instructor pending-classes - Fetching for:', email);
-        console.log('🔐 Decoded email:', req.decoded.email);
-        
         if (!email || req.decoded.email !== email) {
-          console.warn('⚠️ Unauthorized access attempt for pending-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
-        if (!classesCollection) {
-          console.error('❌ classesCollection tidak di-initialize');
-          return res.status(500).send({ success: false, message: 'Database connection error' });
-        }
-
-        console.log('🔍 Querying pending classes with instructorEmail:', email);
-        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'pending'
         }).toArray();
         
-        console.log(`✅ Found ${classes.length} pending classes for instructor`);
-        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        console.error('❌ Error in pending-classes endpoint:', error);
-        res.status(500).send({ 
-          success: false, 
-          error: error.message,
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        res.status(500).send({ success: false, error: error.message });
       }
     });
 
-    // ✅ PERBAIKAN: rejected-classes dengan logging lengkap
     app.get('/api/instructor/rejected-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
-        console.log('🔄 Instructor rejected-classes - Fetching for:', email);
-        console.log('🔐 Decoded email:', req.decoded.email);
-        
         if (!email || req.decoded.email !== email) {
-          console.warn('⚠️ Unauthorized access attempt for rejected-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
-        if (!classesCollection) {
-          console.error('❌ classesCollection tidak di-initialize');
-          return res.status(500).send({ success: false, message: 'Database connection error' });
-        }
-
-        console.log('🔍 Querying rejected classes with instructorEmail:', email);
-        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'rejected'
         }).toArray();
         
-        console.log(`✅ Found ${classes.length} rejected classes for instructor`);
-        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        console.error('❌ Error in rejected-classes endpoint:', error);
-        res.status(500).send({ 
-          success: false, 
-          error: error.message,
-          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-        });
+        res.status(500).send({ success: false, error: error.message });
       }
     });
 
