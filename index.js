@@ -55,45 +55,92 @@ const verifyJWT = (req, res, next) => {
   });
 };
 
-// Role Middleware
+// ✅ PERBAIKAN: Role Middleware dengan error handling yang lebih baik
 const verifyAdmin = async (req, res, next) => {
   try {
-    const email = req.decoded.email;
+    const email = req.decoded?.email;
+    
+    if (!email) {
+      console.warn('⚠️ No email in decoded token');
+      return res.status(401).send({ 
+        success: false,
+        message: 'No email in token' 
+      });
+    }
+    
     const user = await usersCollection.findOne({ email });
     
+    if (!user) {
+      console.warn('⚠️ User not found in database:', email);
+      return res.status(404).send({ 
+        success: false,
+        message: 'User not found in database' 
+      });
+    }
+    
     if (user?.role === 'admin') {
+      console.log('✅ Admin verified:', email);
       next();
     } else {
-      return res.status(401).send({ 
+      console.warn('⚠️ User is not admin:', email, 'role:', user.role);
+      return res.status(403).send({ 
         success: false,
         message: 'Unauthorized admin access' 
       });
     }
   } catch (error) {
+    console.error('❌ Error in verifyAdmin:', error.message);
     return res.status(500).send({ 
       success: false,
-      message: 'Server error during admin verification' 
+      message: 'Server error during admin verification',
+      error: error.message
     });
   }
 };
 
+// ✅ PERBAIKAN: Instructor Middleware dengan error handling yang lebih baik
 const verifyInstructor = async (req, res, next) => {
   try {
-    const email = req.decoded.email;
+    const email = req.decoded?.email;
+    
+    console.log('🔍 Verifying instructor for email:', email);
+    
+    if (!email) {
+      console.warn('⚠️ No email in decoded token');
+      return res.status(401).send({ 
+        success: false,
+        message: 'No email in token' 
+      });
+    }
+    
     const user = await usersCollection.findOne({ email });
     
+    if (!user) {
+      console.warn('⚠️ User not found in database:', email);
+      return res.status(404).send({ 
+        success: false,
+        message: 'User not found in database' 
+      });
+    }
+    
+    console.log('👤 User found - Role:', user.role);
+    
     if (user?.role === 'instructor' || user?.role === 'admin') {
+      console.log('✅ Instructor verified:', email);
       next();
     } else {
+      console.warn('⚠️ User is not instructor:', email, 'role:', user.role);
       return res.status(403).send({ 
         success: false,
         message: 'Hanya instructor yang dapat mengakses fitur ini' 
       });
     }
   } catch (error) {
+    console.error('❌ Error in verifyInstructor:', error.message);
     return res.status(500).send({ 
       success: false,
-      message: 'Server error during instructor verification' 
+      message: 'Server error during instructor verification',
+      error: error.message
     });
   }
 };
@@ -339,60 +386,117 @@ async function run() {
       }
     });
 
+    // ✅ PERBAIKAN: approved-classes dengan logging lengkap
     app.get('/api/instructor/approved-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
+        console.log('🔄 Instructor approved-classes - Fetching for:', email);
+        console.log('🔐 Decoded email:', req.decoded.email);
+        
         if (!email || req.decoded.email !== email) {
+          console.warn('⚠️ Unauthorized access attempt for approved-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
+        if (!classesCollection) {
+          console.error('❌ classesCollection tidak di-initialize');
+          return res.status(500).send({ success: false, message: 'Database connection error' });
+        }
+
+        console.log('🔍 Querying approved classes with instructorEmail:', email);
+        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'approved'
         }).toArray();
         
+        console.log(`✅ Found ${classes.length} approved classes for instructor`);
+        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        res.status(500).send({ success: false, error: error.message });
+        console.error('❌ Error in approved-classes endpoint:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
       }
     });
 
+    // ✅ PERBAIKAN: pending-classes dengan logging lengkap
     app.get('/api/instructor/pending-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
+        console.log('🔄 Instructor pending-classes - Fetching for:', email);
+        console.log('🔐 Decoded email:', req.decoded.email);
+        
         if (!email || req.decoded.email !== email) {
+          console.warn('⚠️ Unauthorized access attempt for pending-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
+        if (!classesCollection) {
+          console.error('❌ classesCollection tidak di-initialize');
+          return res.status(500).send({ success: false, message: 'Database connection error' });
+        }
+
+        console.log('🔍 Querying pending classes with instructorEmail:', email);
+        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'pending'
         }).toArray();
         
+        console.log(`✅ Found ${classes.length} pending classes for instructor`);
+        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        res.status(500).send({ success: false, error: error.message });
+        console.error('❌ Error in pending-classes endpoint:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
       }
     });
 
+    // ✅ PERBAIKAN: rejected-classes dengan logging lengkap
     app.get('/api/instructor/rejected-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
         
+        console.log('🔄 Instructor rejected-classes - Fetching for:', email);
+        console.log('🔐 Decoded email:', req.decoded.email);
+        
         if (!email || req.decoded.email !== email) {
+          console.warn('⚠️ Unauthorized access attempt for rejected-classes');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
+        if (!classesCollection) {
+          console.error('❌ classesCollection tidak di-initialize');
+          return res.status(500).send({ success: false, message: 'Database connection error' });
+        }
+
+        console.log('🔍 Querying rejected classes with instructorEmail:', email);
+        
         const classes = await classesCollection.find({ 
           instructorEmail: email,
           status: 'rejected'
         }).toArray();
         
+        console.log(`✅ Found ${classes.length} rejected classes for instructor`);
+        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        res.status(500).send({ success: false, error: error.message });
+        console.error('❌ Error in rejected-classes endpoint:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
       }
     });
 
