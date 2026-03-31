@@ -308,14 +308,34 @@ async function run() {
       try {
         const email = req.query.email;
         
+        console.log('🔄 Instructor my-classes - Fetching for:', email);
+        console.log('🔐 Decoded email:', req.decoded.email);
+        
         if (!email || req.decoded.email !== email) {
+          console.warn('⚠️ Unauthorized access attempt');
           return res.status(403).send({ success: false, message: 'Unauthorized' });
         }
 
+        // ✅ DEBUG: Cek apakah collection ada
+        if (!classesCollection) {
+          console.error('❌ classesCollection tidak di-initialize');
+          return res.status(500).send({ success: false, message: 'Database connection error' });
+        }
+
+        console.log('🔍 Querying classes with instructorEmail:', email);
+        
         const classes = await classesCollection.find({ instructorEmail: email }).toArray();
+        
+        console.log(`✅ Found ${classes.length} classes for instructor`);
+        
         res.send({ success: true, data: { classes, total: classes.length } });
       } catch (error) {
-        res.status(500).send({ success: false, error: error.message });
+        console.error('❌ Error in my-classes endpoint:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message,
+          stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
       }
     });
 
