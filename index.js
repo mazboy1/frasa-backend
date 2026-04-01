@@ -376,6 +376,121 @@ async function run() {
       }
     });
 
+        // ===== ADMIN USER MANAGEMENT ROUTES =====
+    
+    // ✅ GET ALL USERS (untuk Admin)
+    app.get('/api/users', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        console.log('🔍 Admin requesting all users...');
+        console.log('Requested by:', req.decoded?.email);
+        
+        const users = await usersCollection.find({}).toArray();
+        
+        console.log(`✅ Found ${users.length} users`);
+        
+        // Remove sensitive data
+        const sanitizedUsers = users.map(user => ({
+          _id: user._id,
+          name: user.name || '',
+          email: user.email,
+          role: user.role || 'user',
+          photoUrl: user.photoUrl || '',
+          phone: user.phone || '',
+          createdAt: user.createdAt || new Date()
+        }));
+        
+        res.status(200).send({ 
+          success: true,
+          data: sanitizedUsers,
+          total: sanitizedUsers.length
+        });
+      } catch (error) {
+        console.error('❌ Error fetching users:', error.message);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ UPDATE USER ROLE (untuk Admin)
+    app.patch('/api/users/:id/role', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        const { role } = req.body;
+        const userId = req.params.id;
+        
+        console.log(`🔄 Updating user ${userId} role to ${role}`);
+        
+        if (!['user', 'instructor', 'admin'].includes(role)) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Invalid role' 
+          });
+        }
+        
+        const result = await usersCollection.updateOne(
+          { _id: new ObjectId(userId) },
+          { $set: { role } }
+        );
+        
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ 
+            success: false, 
+            message: 'User not found' 
+          });
+        }
+        
+        console.log('✅ User role updated');
+        
+        res.send({ 
+          success: true, 
+          message: 'User role updated',
+          data: result 
+        });
+      } catch (error) {
+        console.error('❌ Error updating user role:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+    // ✅ DELETE USER (untuk Admin)
+    app.delete('/api/users/:id', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        const userId = req.params.id;
+        
+        console.log(`🗑️ Deleting user ${userId}`);
+        
+        const result = await usersCollection.deleteOne(
+          { _id: new ObjectId(userId) }
+        );
+        
+        if (result.deletedCount === 0) {
+          return res.status(404).send({ 
+            success: false, 
+            message: 'User not found' 
+          });
+        }
+        
+        console.log('✅ User deleted');
+        
+        res.send({ 
+          success: true, 
+          message: 'User deleted',
+          data: result 
+        });
+      } catch (error) {
+        console.error('❌ Error deleting user:', error);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
+
     // Stats Routes
     app.get('/api/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
       try {
