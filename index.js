@@ -164,6 +164,47 @@ async function run() {
       }
     });
 
+    app.post('/api/new-user', async (req, res) => {
+      try {
+        const result = await usersCollection.insertOne(req.body);
+        res.send({ success: true, data: result });
+      } catch (error) {
+        console.error('❌ New user error:', error);
+        res.status(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // ✅ GET ALL USERS (untuk Admin) - ENDPOINT YANG MISSING
+    app.get('/api/users', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        console.log('🔍 Fetching all users...');
+        
+        const users = await usersCollection.find({}).toArray();
+        
+        console.log(`✅ Found ${users.length} users`);
+        
+        // Remove sensitive data
+        const sanitizedUsers = users.map(user => ({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          photoUrl: user.photoUrl || '',
+          phone: user.phone || '',
+          createdAt: user.createdAt || new Date()
+        }));
+        
+        res.send({ 
+          success: true,
+          data: sanitizedUsers,
+          total: sanitizedUsers.length
+        });
+      } catch (error) {
+        console.error('❌ Get users error:', error);
+        res.status(500).send({ success: false, error: error.message });
+      }
+    });
+
     app.get('/api/user/:email', async (req, res) => {
       try {
         const email = req.params.email;
