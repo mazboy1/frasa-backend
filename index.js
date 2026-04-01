@@ -379,10 +379,28 @@ async function run() {
         // ===== ADMIN USER MANAGEMENT ROUTES =====
     
     // ✅ GET ALL USERS (untuk Admin)
+        // ✅ GET ALL USERS (untuk Admin)
     app.get('/api/users', verifyJWT, verifyAdmin, async (req, res) => {
       try {
-        console.log('🔍 Admin requesting all users...');
-        console.log('Requested by:', req.decoded?.email);
+        console.log('🔍 [GET /api/users] Admin requesting all users...');
+        console.log('Authorization header:', req.headers.authorization);
+        console.log('Decoded token:', req.decoded);
+        
+        if (!req.decoded) {
+          return res.status(401).send({
+            success: false,
+            message: 'No token decoded'
+          });
+        }
+        
+        if (!req.decoded.email) {
+          return res.status(401).send({
+            success: false,
+            message: 'No email in token'
+          });
+        }
+        
+        console.log('Requested by:', req.decoded.email);
         
         const users = await usersCollection.find({}).toArray();
         
@@ -405,7 +423,7 @@ async function run() {
           total: sanitizedUsers.length
         });
       } catch (error) {
-        console.error('❌ Error fetching users:', error.message);
+        console.error('❌ [GET /api/users] Error:', error.message);
         res.status(500).send({ 
           success: false, 
           error: error.message 
