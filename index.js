@@ -291,9 +291,17 @@ async function run() {
 
     app.get('/api/classes-manage', async (req, res) => {
       try {
+        console.log('🔍 Fetching all classes for management...');
         const result = await classesCollection.find().toArray();
-        res.send({ success: true, data: result });
+        console.log(`✅ Found ${result.length} classes`);
+        
+        res.send({ 
+          success: true, 
+          data: result,
+          total: result.length 
+        });
       } catch (error) {
+        console.error('❌ Error fetching classes-manage:', error.message);
         res.status(500).send({ success: false, error: error.message });
       }
     });
