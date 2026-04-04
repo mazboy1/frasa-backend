@@ -636,7 +636,7 @@ async function run() {
     });
 
     // ✅ NEW: Check if item exists in cart
-    app.get('/api/cart-item/:classId', verifyJWT, async (req, res) => {
+    app.get('/api/cart-item/:classId', async (req, res) => {
       try {
         const classId = req.params.classId;
         const email = req.query.email;
