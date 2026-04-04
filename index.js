@@ -206,7 +206,6 @@ async function run() {
       }
     });
 
-    // ✅ KEY ENDPOINT - FIX
     app.get('/api/instructor/my-classes', verifyJWT, async (req, res) => {
       try {
         const email = req.query.email;
@@ -316,6 +315,47 @@ async function run() {
       }
     });
 
+    // ✅ NEW ENDPOINT - Class with modules
+    app.get('/api/class-with-modules/:id', async (req, res) => {
+      try {
+        const classId = req.params.id;
+        
+        if (!classId) {
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Class ID required' 
+          });
+        }
+
+        console.log('🔍 Fetching class with modules:', classId);
+
+        const classData = await classesCollection.findOne({ 
+          _id: new ObjectId(classId) 
+        });
+
+        if (!classData) {
+          console.warn('⚠️ Class not found:', classId);
+          return res.status(404).send({ 
+            success: false, 
+            message: 'Class not found' 
+          });
+        }
+
+        console.log('✅ Class found:', classData.name);
+
+        res.send({ 
+          success: true, 
+          data: classData 
+        });
+      } catch (error) {
+        console.error('❌ Error fetching class-with-modules:', error.message);
+        res.status(500).send({ 
+          success: false, 
+          error: error.message 
+        });
+      }
+    });
+
     app.patch('/api/change-status/:id', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const { status, reason } = req.body;
@@ -384,9 +424,7 @@ async function run() {
       }
     });
 
-        // ===== ADMIN USER MANAGEMENT ROUTES =====
-        
-        // ✅ GET ALL USERS (untuk Admin)
+    // Admin User Management Routes
     app.get('/api/users', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         console.log('🔍 [GET /api/users] Admin requesting all users...');
@@ -396,7 +434,6 @@ async function run() {
         
         console.log(`✅ Found ${users.length} users`);
         
-        // Remove sensitive data
         const sanitizedUsers = users.map(user => ({
           _id: user._id,
           name: user.name || '',
@@ -411,7 +448,7 @@ async function run() {
         
         res.status(200).send({ 
           success: true,
-          data: sanitizedUsers,  // ✅ ARRAY, bukan object!
+          data: sanitizedUsers,
           total: sanitizedUsers.length
         });
       } catch (error) {
@@ -423,7 +460,6 @@ async function run() {
       }
     });
 
-    // ✅ UPDATE USER ROLE (untuk Admin)
     app.patch('/api/users/:id/role', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const { role } = req.body;
@@ -466,7 +502,6 @@ async function run() {
       }
     });
 
-    // ✅ DELETE USER (untuk Admin)
     app.delete('/api/users/:id', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const userId = req.params.id;
@@ -499,7 +534,6 @@ async function run() {
         });
       }
     });
-
 
     // Stats Routes
     app.get('/api/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
