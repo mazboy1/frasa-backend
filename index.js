@@ -635,13 +635,14 @@ async function run() {
       }
     });
 
-    // ✅ NEW: Check if item exists in cart
+    
+        // ✅ GET: Check if item exists in cart (NO JWT REQUIRED - just query with email)
     app.get('/api/cart-item/:classId', async (req, res) => {
       try {
         const classId = req.params.classId;
         const email = req.query.email;
 
-        console.log('🔍 [GET /api/cart-item] Checking if class in cart:', classId, email);
+        console.log('🔍 [GET /api/cart-item] Checking if class in cart:', classId, 'email:', email);
 
         if (!email) {
           return res.status(400).send({
@@ -667,6 +668,7 @@ async function run() {
           console.log('⚠️ Item not found in cart');
           res.status(404).send({
             success: false,
+            classId: classId,
             message: 'Item not in cart'
           });
         }
