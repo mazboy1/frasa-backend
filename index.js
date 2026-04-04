@@ -20,7 +20,7 @@ const client = new MongoClient(uri, {
   }
 });
 
-// JWT Middleware (define di luar)
+// JWT Middleware
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization;
   
@@ -69,7 +69,7 @@ async function run() {
     
     console.log("✅ All collections initialized");
 
-    // ✅ ROLE MIDDLEWARE (define di dalam run())
+    // ROLE MIDDLEWARE
     const verifyAdmin = async (req, res, next) => {
       try {
         const email = req.decoded?.email;
@@ -146,9 +146,8 @@ async function run() {
       }
     };
 
-    // ===== ROUTES (define setelah collections ready) =====
+    // ===== USER ROUTES =====
     
-    // User Routes
     app.post('/api/set-token', async (req, res) => {
       try {
         const { email, name } = req.body;
@@ -196,7 +195,8 @@ async function run() {
       }
     });
 
-    // Instructor Routes
+    // ===== INSTRUCTOR ROUTES =====
+    
     app.get('/api/instructors', async (req, res) => {
       try {
         const instructors = await usersCollection.find({ role: 'instructor' }).toArray();
@@ -261,7 +261,8 @@ async function run() {
       }
     });
 
-    // Class Routes
+    // ===== CLASS ROUTES =====
+    
     app.post('/api/new-class', verifyJWT, verifyInstructor, async (req, res) => {
       try {
         const classData = {
@@ -315,7 +316,6 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Class with modules
     app.get('/api/class-with-modules/:id', async (req, res) => {
       try {
         const classId = req.params.id;
@@ -356,14 +356,12 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Apply as Instructor (POST)
     app.post('/api/as-instructor', async (req, res) => {
       try {
         const { name, email, experience, submitted } = req.body;
 
         console.log('📝 [POST /api/as-instructor] New application:', email);
 
-        // Validation
         if (!name || !email || !experience) {
           return res.status(400).send({
             success: false,
@@ -378,7 +376,6 @@ async function run() {
           });
         }
 
-        // Check if already applied
         const existingApplication = await appliedCollection.findOne({ email });
         if (existingApplication) {
           return res.status(400).send({
@@ -387,7 +384,6 @@ async function run() {
           });
         }
 
-        // Insert application
         const applicationData = {
           name,
           email,
@@ -420,7 +416,6 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Check application status (GET)
     app.get('/api/applied-instructors/:email', async (req, res) => {
       try {
         const email = req.params.email;
@@ -452,7 +447,6 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Admin: Get all instructor applications
     app.get('/api/admin/instructor-applications', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         console.log('📋 [GET /api/admin/instructor-applications] Fetching all applications...');
@@ -475,7 +469,6 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Admin: Approve instructor application
     app.patch('/api/admin/approve-instructor/:applicationId', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const applicationId = req.params.applicationId;
@@ -483,7 +476,6 @@ async function run() {
 
         console.log('✅ [PATCH] Admin approving application:', applicationId);
 
-        // Get application
         const application = await appliedCollection.findOne({
           _id: new ObjectId(applicationId)
         });
@@ -495,7 +487,6 @@ async function run() {
           });
         }
 
-        // Update application status
         await appliedCollection.updateOne(
           { _id: new ObjectId(applicationId) },
           {
@@ -507,8 +498,7 @@ async function run() {
           }
         );
 
-        // Update user role to instructor
-        const updateResult = await usersCollection.updateOne(
+        await usersCollection.updateOne(
           { email: application.email },
           { $set: { role: 'instructor' } }
         );
@@ -533,7 +523,6 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Admin: Reject instructor application
     app.patch('/api/admin/reject-instructor/:applicationId', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const applicationId = req.params.applicationId;
@@ -542,7 +531,6 @@ async function run() {
 
         console.log('❌ [PATCH] Admin rejecting application:', applicationId);
 
-        // Get application
         const application = await appliedCollection.findOne({
           _id: new ObjectId(applicationId)
         });
@@ -554,7 +542,6 @@ async function run() {
           });
         }
 
-        // Update application status
         await appliedCollection.updateOne(
           { _id: new ObjectId(applicationId) },
           {
@@ -613,18 +600,125 @@ async function run() {
       }
     });
 
-    // Cart Routes
+    // ===== CART ROUTES =====
+    
     app.post('/api/add-to-cart', verifyJWT, async (req, res) => {
       try {
         const { classId, userMail } = req.body;
+
+        console.log('🛒 [POST /api/add-to-cart] Adding to cart:', classId, userMail);
+
         const existingItem = await cartCollection.findOne({ classId, userMail });
         if (existingItem) {
-          return res.status(400).send({ success: false, message: 'Kelas sudah ada di keranjang' });
+          return res.status(400).send({ 
+            success: false, 
+            message: 'Kelas sudah ada di keranjang' 
+          });
         }
-        const result = await cartCollection.insertOne({ classId, userMail, submitted: new Date() });
-        res.send({ success: true, data: { insertedId: result.insertedId } });
+
+        const result = await cartCollection.insertOne({ 
+          classId, 
+          userMail, 
+          submitted: new Date() 
+        });
+
+        console.log('✅ Added to cart:', result.insertedId);
+
+        res.send({ 
+          success: true, 
+          message: 'Berhasil ditambahkan ke keranjang',
+          data: { insertedId: result.insertedId } 
+        });
       } catch (error) {
+        console.error('❌ Error adding to cart:', error.message);
         res.status(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // ✅ NEW: Check if item exists in cart
+    app.get('/api/cart-item/:classId', verifyJWT, async (req, res) => {
+      try {
+        const classId = req.params.classId;
+        const email = req.query.email;
+
+        console.log('🔍 [GET /api/cart-item] Checking if class in cart:', classId, email);
+
+        if (!email) {
+          return res.status(400).send({
+            success: false,
+            message: 'Email query parameter required'
+          });
+        }
+
+        const cartItem = await cartCollection.findOne({
+          classId: classId,
+          userMail: email
+        });
+
+        if (cartItem) {
+          console.log('✅ Item found in cart');
+          res.send({
+            success: true,
+            data: cartItem,
+            classId: classId,
+            message: 'Item found in cart'
+          });
+        } else {
+          console.log('⚠️ Item not found in cart');
+          res.status(404).send({
+            success: false,
+            message: 'Item not in cart'
+          });
+        }
+      } catch (error) {
+        console.error('❌ Error checking cart item:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // ✅ NEW: Remove item from cart
+    app.delete('/api/cart-item/:classId', verifyJWT, async (req, res) => {
+      try {
+        const classId = req.params.classId;
+        const email = req.query.email;
+
+        console.log('🗑️ [DELETE /api/cart-item] Removing from cart:', classId, email);
+
+        if (!email) {
+          return res.status(400).send({
+            success: false,
+            message: 'Email query parameter required'
+          });
+        }
+
+        const result = await cartCollection.deleteOne({
+          classId: classId,
+          userMail: email
+        });
+
+        if (result.deletedCount === 0) {
+          return res.status(404).send({
+            success: false,
+            message: 'Item not found in cart'
+          });
+        }
+
+        console.log('✅ Item removed from cart');
+
+        res.send({
+          success: true,
+          message: 'Item removed from cart',
+          data: result
+        });
+      } catch (error) {
+        console.error('❌ Error removing cart item:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
       }
     });
 
@@ -639,7 +733,8 @@ async function run() {
       }
     });
 
-    // Payment Routes
+    // ===== PAYMENT ROUTES =====
+    
     app.post('/api/create-payment-intent', async (req, res) => {
       try {
         const { price } = req.body;
@@ -655,14 +750,12 @@ async function run() {
       }
     });
 
-    // ✅ NEW ENDPOINT - Payment History
     app.get('/api/payment-history/:email', verifyJWT, async (req, res) => {
       try {
         const email = req.params.email;
 
         console.log('📋 [GET /api/payment-history] Fetching payments for:', email);
 
-        // Verify user is getting their own payment history
         if (req.decoded.email !== email) {
           return res.status(403).send({
             success: false,
@@ -688,11 +781,11 @@ async function run() {
       }
     });
 
-    // Admin User Management Routes
+    // ===== ADMIN USER MANAGEMENT =====
+    
     app.get('/api/users', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         console.log('🔍 [GET /api/users] Admin requesting all users...');
-        console.log('Decoded token email:', req.decoded?.email);
         
         const users = await usersCollection.find({}).toArray();
         
@@ -707,8 +800,6 @@ async function run() {
           phone: user.phone || '',
           createdAt: user.createdAt || new Date()
         }));
-        
-        console.log('📤 Sending response with data array:', sanitizedUsers.length);
         
         res.status(200).send({ 
           success: true,
@@ -799,7 +890,8 @@ async function run() {
       }
     });
 
-    // Stats Routes
+    // ===== STATS ROUTES =====
+    
     app.get('/api/admin-stats', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const approvedClasses = await classesCollection.countDocuments({ status: 'approved' });
@@ -825,7 +917,8 @@ async function run() {
       }
     });
 
-    // Debug Routes
+    // ===== DEBUG ROUTES =====
+    
     app.get('/api/debug/user/:email', async (req, res) => {
       try {
         const user = await usersCollection.findOne({ email: req.params.email });
@@ -835,12 +928,12 @@ async function run() {
       }
     });
 
-    // Health check
+    // ===== HEALTH CHECK =====
+    
     app.get('/health', (req, res) => {
       res.status(200).json({ success: true, status: 'OK' });
     });
 
-    // Root endpoint
     app.get('/', (req, res) => {
       res.send('🚀 Frasa ID LMS Server is Running');
     });
