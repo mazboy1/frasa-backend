@@ -452,6 +452,141 @@ async function run() {
       }
     });
 
+    // ✅ NEW ENDPOINT - Admin: Get all instructor applications
+    app.get('/api/admin/instructor-applications', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        console.log('📋 [GET /api/admin/instructor-applications] Fetching all applications...');
+
+        const applications = await appliedCollection.find({}).toArray();
+
+        console.log(`✅ Found ${applications.length} applications`);
+
+        res.send({
+          success: true,
+          data: applications,
+          total: applications.length
+        });
+      } catch (error) {
+        console.error('❌ Error fetching applications:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // ✅ NEW ENDPOINT - Admin: Approve instructor application
+    app.patch('/api/admin/approve-instructor/:applicationId', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        const applicationId = req.params.applicationId;
+        const adminEmail = req.decoded?.email;
+
+        console.log('✅ [PATCH] Admin approving application:', applicationId);
+
+        // Get application
+        const application = await appliedCollection.findOne({
+          _id: new ObjectId(applicationId)
+        });
+
+        if (!application) {
+          return res.status(404).send({
+            success: false,
+            message: 'Application not found'
+          });
+        }
+
+        // Update application status
+        await appliedCollection.updateOne(
+          { _id: new ObjectId(applicationId) },
+          {
+            $set: {
+              status: 'approved',
+              reviewed: new Date(),
+              reviewedBy: adminEmail
+            }
+          }
+        );
+
+        // Update user role to instructor
+        const updateResult = await usersCollection.updateOne(
+          { email: application.email },
+          { $set: { role: 'instructor' } }
+        );
+
+        console.log('✅ User role updated to instructor:', application.email);
+
+        res.send({
+          success: true,
+          message: 'Aplikasi disetujui dan user menjadi instructor',
+          data: {
+            applicationId,
+            userEmail: application.email,
+            newRole: 'instructor'
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error approving application:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
+    // ✅ NEW ENDPOINT - Admin: Reject instructor application
+    app.patch('/api/admin/reject-instructor/:applicationId', verifyJWT, verifyAdmin, async (req, res) => {
+      try {
+        const applicationId = req.params.applicationId;
+        const { reason } = req.body;
+        const adminEmail = req.decoded?.email;
+
+        console.log('❌ [PATCH] Admin rejecting application:', applicationId);
+
+        // Get application
+        const application = await appliedCollection.findOne({
+          _id: new ObjectId(applicationId)
+        });
+
+        if (!application) {
+          return res.status(404).send({
+            success: false,
+            message: 'Application not found'
+          });
+        }
+
+        // Update application status
+        await appliedCollection.updateOne(
+          { _id: new ObjectId(applicationId) },
+          {
+            $set: {
+              status: 'rejected',
+              reviewed: new Date(),
+              reviewedBy: adminEmail,
+              rejectionReason: reason || 'Tidak memenuhi kriteria'
+            }
+          }
+        );
+
+        console.log('✅ Application rejected:', application.email);
+
+        res.send({
+          success: true,
+          message: 'Aplikasi ditolak',
+          data: {
+            applicationId,
+            userEmail: application.email,
+            rejectionReason: reason
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error rejecting application:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
     app.patch('/api/change-status/:id', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const { status, reason } = req.body;
@@ -517,6 +652,39 @@ async function run() {
         res.send({ success: true, data: { clientSecret: paymentIntent.client_secret } });
       } catch (error) {
         res.status(500).send({ success: false, error: error.message });
+      }
+    });
+
+    // ✅ NEW ENDPOINT - Payment History
+    app.get('/api/payment-history/:email', verifyJWT, async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        console.log('📋 [GET /api/payment-history] Fetching payments for:', email);
+
+        // Verify user is getting their own payment history
+        if (req.decoded.email !== email) {
+          return res.status(403).send({
+            success: false,
+            message: 'Unauthorized - dapat hanya melihat data sendiri'
+          });
+        }
+
+        const payments = await paymentCollection.find({ userEmail: email }).toArray();
+
+        console.log(`✅ Found ${payments.length} payments`);
+
+        res.send({
+          success: true,
+          data: payments,
+          total: payments.length
+        });
+      } catch (error) {
+        console.error('❌ Error fetching payment history:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
       }
     });
 
