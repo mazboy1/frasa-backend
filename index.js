@@ -356,6 +356,102 @@ async function run() {
       }
     });
 
+    // ✅ NEW ENDPOINT - Apply as Instructor (POST)
+    app.post('/api/as-instructor', async (req, res) => {
+      try {
+        const { name, email, experience, submitted } = req.body;
+
+        console.log('📝 [POST /api/as-instructor] New application:', email);
+
+        // Validation
+        if (!name || !email || !experience) {
+          return res.status(400).send({
+            success: false,
+            message: 'Semua field harus diisi'
+          });
+        }
+
+        if (experience.length < 10) {
+          return res.status(400).send({
+            success: false,
+            message: 'Pengalaman minimal 10 karakter'
+          });
+        }
+
+        // Check if already applied
+        const existingApplication = await appliedCollection.findOne({ email });
+        if (existingApplication) {
+          return res.status(400).send({
+            success: false,
+            message: 'Anda sudah pernah mendaftar sebagai instruktur'
+          });
+        }
+
+        // Insert application
+        const applicationData = {
+          name,
+          email,
+          experience,
+          status: 'pending',
+          submitted: submitted ? new Date(submitted) : new Date(),
+          reviewed: null,
+          reviewedBy: null
+        };
+
+        const result = await appliedCollection.insertOne(applicationData);
+
+        console.log('✅ Application created:', result.insertedId);
+
+        res.status(201).send({
+          success: true,
+          message: 'Aplikasi berhasil dikirim',
+          data: {
+            _id: result.insertedId,
+            ...applicationData
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error in as-instructor:', error.message);
+        res.status(500).send({
+          success: false,
+          message: 'Server error',
+          error: error.message
+        });
+      }
+    });
+
+    // ✅ NEW ENDPOINT - Check application status (GET)
+    app.get('/api/applied-instructors/:email', async (req, res) => {
+      try {
+        const email = req.params.email;
+
+        console.log('🔍 Checking application for:', email);
+
+        const application = await appliedCollection.findOne({ email });
+
+        if (!application) {
+          return res.status(404).send({
+            success: false,
+            message: 'Belum ada aplikasi',
+            data: null
+          });
+        }
+
+        console.log('✅ Application found:', application._id);
+
+        res.send({
+          success: true,
+          data: application
+        });
+      } catch (error) {
+        console.error('❌ Error in applied-instructors:', error.message);
+        res.status(500).send({
+          success: false,
+          error: error.message
+        });
+      }
+    });
+
     app.patch('/api/change-status/:id', verifyJWT, verifyAdmin, async (req, res) => {
       try {
         const { status, reason } = req.body;
