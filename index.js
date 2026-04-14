@@ -949,6 +949,99 @@
         }
       });
 
+          // ===== PAYMENT INFO ENDPOINT =====
+    
+    app.post('/api/payment-info', verifyJWT, async (req, res) => {
+      try {
+        const paymentData = req.body;
+        const classId = req.query.classId;
+
+        console.log('💳 [POST /api/payment-info] Processing payment:', {
+          transactionId: paymentData.transactionId,
+          amount: paymentData.amount,
+          userEmail: paymentData.userEmail,
+          classesId: paymentData.classesId,
+          classId: classId
+        });
+
+        // Validasi required fields
+        if (!paymentData.transactionId || !paymentData.userEmail) {
+          return res.status(400).send({
+            success: false,
+            message: 'transactionId dan userEmail diperlukan'
+          });
+        }
+
+        // Prepare data untuk disimpan ke database
+        const finalPaymentData = {
+          transactionId: paymentData.transactionId,
+          paymentMethod: paymentData.paymentMethod,
+          amount: paymentData.amount,
+          currency: paymentData.currency,
+          paymentStatus: paymentData.paymentStatus,
+          userName: paymentData.userName,
+          userEmail: paymentData.userEmail,
+          classesId: paymentData.classesId,
+          date: new Date(paymentData.date),
+          status: 'completed'
+        };
+
+        // Insert ke payment collection
+        const result = await paymentCollection.insertOne(finalPaymentData);
+
+        console.log('✅ Payment info saved:', result.insertedId);
+
+        // ✅ Optional: Enroll user ke kelas yang dibayar
+        const classesToEnroll = Array.isArray(paymentData.classesId) 
+          ? paymentData.classesId 
+          : [paymentData.classesId];
+
+        // Insert enrollment untuk setiap kelas
+        for (const cId of classesToEnroll) {
+          try {
+            await enrolledCollection.insertOne({
+              classesId: new ObjectId(cId),
+              userEmail: paymentData.userEmail,
+              date: new Date(),
+              status: 'active'
+            });
+            console.log('✅ Enrolled user to class:', cId);
+          } catch (enrollErr) {
+            console.warn('⚠️ Error enrolling to class:', enrollErr.message);
+          }
+        }
+
+        // ✅ Optional: Hapus dari cart setelah pembayaran
+        try {
+          await cartCollection.deleteMany({
+            userMail: paymentData.userEmail,
+            classId: { $in: classesToEnroll }
+          });
+          console.log('✅ Removed from cart after payment');
+        } catch (cartErr) {
+          console.warn('⚠️ Error removing from cart:', cartErr.message);
+        }
+
+        res.send({
+          success: true,
+          message: 'Payment info berhasil disimpan',
+          data: {
+            insertedId: result.insertedId,
+            ...finalPaymentData
+          }
+        });
+      } catch (error) {
+        console.error('❌ Error processing payment info:', error.message);
+        res.status(500).send({
+          success: false,
+          message: 'Error processing payment',
+          error: error.message
+        });
+      }
+    });
+
+    // ===== HEALTH CHECK =====
+
       // ===== HEALTH CHECK =====
       
       app.get('/health', (req, res) => {
