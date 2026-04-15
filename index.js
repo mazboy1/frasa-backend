@@ -356,6 +356,145 @@
         }
       });
 
+          // ✅ ===== GET SINGLE CLASS ENDPOINTS FOR UPDATE PAGE =====
+      
+      // GET single class by ID - untuk mendapatkan data class untuk UPDATE page
+      app.get('/api/single-class/:id', async (req, res) => {
+        try {
+          const classId = req.params.id;
+          
+          console.log('🔍 [GET /api/single-class] Fetching class:', classId);
+          
+          if (!classId) {
+            return res.status(400).send({
+              success: false,
+              message: 'Class ID is required'
+            });
+          }
+          
+          // Validasi ObjectId format
+          if (!ObjectId.isValid(classId)) {
+            return res.status(400).send({
+              success: false,
+              message: 'Invalid class ID format'
+            });
+          }
+          
+          const classData = await classesCollection.findOne({
+            _id: new ObjectId(classId)
+          });
+          
+          if (!classData) {
+            console.warn('⚠️ Class not found:', classId);
+            return res.status(404).send({
+              success: false,
+              message: 'Class not found'
+            });
+          }
+          
+          console.log('✅ Class found:', classData.name);
+          
+          res.send({
+            success: true,
+            data: classData
+          });
+        } catch (error) {
+          console.error('❌ Error fetching single class:', error.message);
+          res.status(500).send({
+            success: false,
+            message: 'Server error',
+            error: error.message
+          });
+        }
+      });
+
+      // GET class by ID untuk student view (approved classes only)
+      app.get('/api/classes/:id', async (req, res) => {
+        try {
+          const classId = req.params.id;
+          
+          console.log('🔍 [GET /api/classes/:id] Fetching approved class:', classId);
+          
+          if (!classId || !ObjectId.isValid(classId)) {
+            return res.status(400).send({
+              success: false,
+              message: 'Invalid class ID'
+            });
+          }
+          
+          const classData = await classesCollection.findOne({
+            _id: new ObjectId(classId),
+            status: 'approved'
+          });
+          
+          if (!classData) {
+            return res.status(404).send({
+              success: false,
+              message: 'Class not found or not approved'
+            });
+          }
+          
+          console.log('✅ Approved class found:', classData.name);
+          
+          res.send({
+            success: true,
+            data: classData
+          });
+        } catch (error) {
+          console.error('❌ Error fetching class:', error.message);
+          res.status(500).send({
+            success: false,
+            error: error.message
+          });
+        }
+      });
+
+      // GET instructor's specific class (untuk UPDATE page)
+      app.get('/api/instructor/class/:id', verifyJWT, verifyInstructor, async (req, res) => {
+        try {
+          const classId = req.params.id;
+          const instructorEmail = req.decoded?.email;
+          
+          console.log('🔍 [GET /api/instructor/class/:id] Fetching class for instructor:', {
+            classId,
+            instructorEmail
+          });
+          
+          if (!classId || !ObjectId.isValid(classId)) {
+            return res.status(400).send({
+              success: false,
+              message: 'Invalid class ID'
+            });
+          }
+          
+          const classData = await classesCollection.findOne({
+            _id: new ObjectId(classId),
+            instructorEmail: instructorEmail
+          });
+          
+          if (!classData) {
+            console.warn('⚠️ Class not found for this instructor');
+            return res.status(404).send({
+              success: false,
+              message: 'Class not found or unauthorized'
+            });
+          }
+          
+          console.log('✅ Instructor class found:', classData.name);
+          
+          res.send({
+            success: true,
+            data: classData
+          });
+        } catch (error) {
+          console.error('❌ Error fetching instructor class:', error.message);
+          res.status(500).send({
+            success: false,
+            error: error.message
+          });
+        }
+      });  
+
       app.post('/api/as-instructor', async (req, res) => {
         try {
           const { name, email, experience, submitted } = req.body;
